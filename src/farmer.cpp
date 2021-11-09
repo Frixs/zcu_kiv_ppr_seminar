@@ -147,7 +147,8 @@ void _process_segment_data(double* values, size_t n,
 /// <summary>
 /// UNDONE
 /// </summary>
-void _analyze_data(std::ifstream* file, size_t* fsize, size_t* total_values, double* bucket_lower_val, double* bucket_upper_val)
+void _analyze_data(std::ifstream* file, size_t* fsize, 
+	size_t* total_values, double* bucket_lower_val, double* bucket_upper_val)
 {
 	size_t fi; // data file iterator
 	size_t fi_fsize_remaining; // data file iterator counter based on remaining file size to read
@@ -209,7 +210,8 @@ void _analyze_data(std::ifstream* file, size_t* fsize, size_t* total_values, dou
 /// <summary>
 /// UNDONE
 /// </summary>
-void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values, int percentil, double* bucket_lower_val, double* bucket_upper_val, size_t* bucket_value_offset)
+void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values, int percentil, 
+	double* bucket_lower_val, double* bucket_upper_val, size_t* bucket_value_offset, size_t* bucket_total_found)
 {
 	size_t fi; // data file iterator
 	size_t fi_fsize_remaining; // data file iterator counter based on remaining file size to read
@@ -219,7 +221,7 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 	size_t buffer_size = 0;
 
 	float pctp_offset = 0; // offset % from the lowest (initial) limit to the current one; it maintain percentil position in all data sequence
-
+	
 	double bucket_pivot_val = 0; // initial pivot value of currently calculated bucket
 	size_t lows = 0; // Bucket numers lower than pivot
 	size_t highs = 0; // Bucket numbers greater than pivot
@@ -235,8 +237,9 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 		lows = 0;
 		highs = 0;
 		equals = 0;
-		pivot_upper_samples.clear();
 		pivot_lower_samples.clear();
+		pivot_upper_samples.clear();
+		pivot_equal_samples.clear();
 
 		// Iterate over the segments
 		// ... to preserve the memory limit
@@ -260,8 +263,11 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 		// Free the last buffer once done
 		_try_free_buffer(&buffer);
 
+		// Count found values
+		*bucket_total_found = lows + highs + equals;
+
 		// If there is need for the next segment calculations...
-		if ((lows + highs + equals) * sizeof(double) > constants::SEGMENT_SEARCH_MEMORY_LIMIT)
+		if (*bucket_total_found * sizeof(double) > constants::SEGMENT_SEARCH_MEMORY_LIMIT)
 		{
 			// Get pct of upper/lower segment counters
 			float pctp_lower = lows / (total_values / 100.0f);
@@ -273,9 +279,10 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 			if (percentil > pctp_lower + pctp_equal + pctp_offset)
 			{
 				*bucket_lower_val = bucket_pivot_val;
+				pivot_upper_samples.insert(pivot_upper_samples.end(), pivot_equal_samples.begin(), pivot_equal_samples.end());
 				bucket_pivot_val = utils::select_r_item(pivot_upper_samples, pivot_upper_samples.size());
-				pctp_offset += pctp_lower + pctp_equal;
-				*bucket_value_offset += lows + equals;
+				pctp_offset += pctp_lower;
+				*bucket_value_offset += lows;
 				std::cout << "=== UPPER GOES NEXT ==========================" << "\n";
 			}
 			// If EQUAL goes...
@@ -289,6 +296,7 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 			else
 			{
 				*bucket_upper_val = bucket_pivot_val;
+				pivot_lower_samples.insert(pivot_lower_samples.end(), pivot_equal_samples.begin(), pivot_equal_samples.end());
 				bucket_pivot_val = utils::select_r_item(pivot_lower_samples, pivot_lower_samples.size());
 				std::cout << "=== LOWER GOES NEXT ==========================" << "\n";
 			}
@@ -310,13 +318,14 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 				break;
 		}
 
-	} while ((lows + highs + equals) * sizeof(double) > constants::SEGMENT_SEARCH_MEMORY_LIMIT); // if there is need for the next segment calculations...
+	} while (*bucket_total_found * sizeof(double) > constants::SEGMENT_SEARCH_MEMORY_LIMIT); // if there is need for the next segment calculations...
 }
 
 /// <summary>
 /// UNDONE
 /// </summary>
-void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, int percentil, double bucket_lower_val, double bucket_upper_val, size_t bucket_value_offset, double* percentil_value)
+void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, int percentil, double bucket_lower_val, double bucket_upper_val, size_t bucket_value_offset, size_t bucket_total_found, 
+	double* percentil_value)
 {
 	size_t fi; // data file iterator
 	size_t fi_fsize_remaining; // data file iterator counter based on remaining file size to read
@@ -328,7 +337,8 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 	size_t percentil_pos = (size_t)round(total_values * (percentil / 100.0f)); // get percentil number position relative to the entire (valid) data sequence
 	size_t percentil_bucket_idx = percentil_pos - bucket_value_offset - 1;
 
-	std::vector<double> percentil_bucket{};
+	std::vector<double> percentil_bucket(bucket_total_found);
+	size_t iv = 0;
 
 	// Iterate over the segments
 	// ... to preserve the memory limit
@@ -342,7 +352,7 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 		// Read data into buffer
 		(*file).seekg(fi_seekfrom, std::ios::beg);
 		(*file).read(buffer, buffer_size);
-
+		
 		for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
 		{
 			double v = ((double*)buffer)[i];
@@ -352,7 +362,10 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 			{
 				// Check the limits
 				if (v >= bucket_lower_val && v <= bucket_upper_val)
-					percentil_bucket.push_back(v);
+				{
+					percentil_bucket[iv] = v;
+					iv++;
+				}
 			}
 		}
 	}
@@ -369,12 +382,12 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 	std::cout << "percentil_bucket_idx = " << percentil_bucket_idx << std::endl;
 	std::cout << "bucket_upper_val = " << bucket_upper_val << std::endl;
 	std::cout << "bucket_lower_val = " << bucket_lower_val << std::endl;
-	//std::cout << "v= {";
-	//for (double i : percentil_bucket)
-	//	std::cout << i << ", ";
-	//std::cout << "}\n";
+	/*std::cout << "v= {";
+	for (double i : percentil_bucket)
+		std::cout << i << ", ";
+	std::cout << "}\n";*/
 	std::cout << "PERCENTIL : " << percentil << std::endl;
-	
+
 	// Set the value
 	*percentil_value = percentil_bucket[percentil_bucket_idx];
 }
@@ -386,7 +399,7 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 void farmer::process(int percentil)
 {
 	// Open file
-	std::ifstream file("data/data4.bin", std::ios::binary);
+	std::ifstream file("data/data1.bin", std::ios::binary);
 	if (file.is_open())
 	{
 		double percentil_value;
@@ -397,6 +410,7 @@ void farmer::process(int percentil)
 		double bucket_lower_val; // lower limit bucket value
 		size_t total_values = 0; // total valid values
 		size_t bucket_value_offset = 0; // offset from the lowest (initial) limit to the current one of total valid values
+		size_t bucket_total_found = 0;
 
 
 
@@ -424,7 +438,7 @@ void farmer::process(int percentil)
 		{
 			// 2. - Find lower/upper limit values
 			std::cout << "Finding lower/upper bucket values according to memory limits..." << std::endl;
-			_find_bucket_limits(&file, &fsize, total_values, percentil, &bucket_lower_val, &bucket_upper_val, &bucket_value_offset);
+			_find_bucket_limits(&file, &fsize, total_values, percentil, &bucket_lower_val, &bucket_upper_val, &bucket_value_offset, &bucket_total_found);
 			std::cout << "Lower/Upper values successfully found!" << std::endl << std::endl;
 
 			// Get ending timepoint
@@ -437,13 +451,13 @@ void farmer::process(int percentil)
 
 			std::cout << "Time taken to select final bucket: "
 				<< duration.count() << " seconds" << std::endl << std::endl;
-
+			
 			// If the data is NOT sequence of the same single number...
 			if (bucket_lower_val != bucket_upper_val)
 			{
 				// 3. - Get the percentil
 				std::cout << "Selecting percentil value..." << std::endl;
-				_find_percentil(&file, &fsize, total_values, percentil, bucket_lower_val, bucket_upper_val, bucket_value_offset, &percentil_value);
+				_find_percentil(&file, &fsize, total_values, percentil, bucket_lower_val, bucket_upper_val, bucket_value_offset, bucket_total_found, &percentil_value);
 				std::cout << "Percentil value succesfully selected!" << std::endl << std::endl;
 			}
 			// Otherwise, there is only 1 number...
