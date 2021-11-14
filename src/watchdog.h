@@ -4,9 +4,9 @@
 #include <thread>
 #include <chrono>
 #include "constants.h"
-#include "farmer.h"
+#include "worker.h"
 
 namespace watchdog
 {
-	int run(farmer::State state);
+	int run(worker::State state);
 }

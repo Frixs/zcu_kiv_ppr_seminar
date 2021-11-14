@@ -1,9 +1,9 @@
-#include "farmer.h"
+#include "worker.h"
 
 #pragma region Private Process Variables
 
 /// UNDONE
-farmer::State _state;
+worker::State _state;
 
 #pragma endregion
 
@@ -386,7 +386,7 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 
 #pragma region Public Process Functions
 
-void farmer::process(State state, std::string filePath, int percentil, ProcessingType processingType)
+void worker::run(worker::State state, std::string filePath, int percentil, worker::ProcessingType processingType)
 {
 	// Assign new state
 	_state = state;

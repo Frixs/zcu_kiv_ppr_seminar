@@ -140,7 +140,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\farmer.cpp" />
+    <ClCompile Include="src\worker.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\manager.cpp" />
     <ClCompile Include="src\mymem.cpp" />
@@ -149,7 +149,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\constants.h" />
-    <ClInclude Include="src\farmer.h" />
+    <ClInclude Include="src\worker.h" />
     <ClInclude Include="src\manager.h" />
     <ClInclude Include="src\mymem.h" />
     <ClInclude Include="src\utils.h" />

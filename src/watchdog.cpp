@@ -3,7 +3,7 @@
 /// <summary>
 /// UNDONE
 /// </summary>
-int watchdog::run(farmer::State state)
+int watchdog::run(worker::State state)
 {
 	while (true)
 	{

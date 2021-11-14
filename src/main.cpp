@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <future>
 #include "mymem.h"
-#include "farmer.h"
+#include "worker.h"
 #include "watchdog.h"
 
 
@@ -15,13 +15,13 @@ int main()
 	std::cout << "Starting...\n\n";
 	
 	// Create new state values
-	auto state = farmer::State();
+	auto state = worker::State();
 	
 	// Start watchdog
 	auto watchdog_res = std::async(watchdog::run, state);
 
 	// Start processing
-	farmer::process(state, "data/data4.bin", 35, farmer::ProcessingType::SingleThread);
+	worker::run(state, "data/data4.bin", 35, worker::ProcessingType::SingleThread);
 
 
 

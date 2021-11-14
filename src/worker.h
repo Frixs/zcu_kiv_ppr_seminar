@@ -9,9 +9,9 @@
 #include "constants.h"
 #include "utils.h"
 
-namespace farmer
+namespace worker
 {
-	enum ProcessingType
+	enum class ProcessingType
 	{
 		SingleThread,
 		MultiThread,
@@ -49,5 +49,5 @@ namespace farmer
 	/// <summary>
 	/// UNDONE
 	/// </summary>
-	void process(State state, std::string filePath, int percentil, ProcessingType processingType);
+	void run(State state, std::string filePath, int percentil, ProcessingType processingType);
 }
