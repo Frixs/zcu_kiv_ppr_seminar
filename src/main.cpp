@@ -18,10 +18,14 @@ int main()
 	auto state = worker::State();
 	
 	// Start watchdog
-	auto watchdog_res = std::async(watchdog::run, state);
+	auto watchdog_res = std::async(watchdog::run, &state);
 
 	// Start processing
-	worker::run(state, "data/data4.bin", 35, worker::ProcessingType::SingleThread);
+	do
+	{
+		state.set_defaults();
+		worker::run(&state, "data/data4.bin", 35, worker::ProcessingType::SingleThread);
+	} while (state.recovery_requested);
 
 
 

@@ -8,5 +8,5 @@
 
 namespace watchdog
 {
-	int run(worker::State state);
+	int run(worker::State* state);
 }

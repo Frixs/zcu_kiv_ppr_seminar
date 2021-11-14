@@ -3,7 +3,7 @@
 #pragma region Private Process Variables
 
 /// UNDONE
-worker::State _state;
+worker::State* _state;
 
 #pragma endregion
 
@@ -63,6 +63,8 @@ void _process_segment_data(double* values, size_t n,
 
 	for (size_t i = 0; i < n; ++i)
 	{
+		if ((*_state).terminate_process_requested) return;
+
 		double v = values[i];
 		//std::cout << "-> " << v << std::endl;
 
@@ -150,6 +152,9 @@ void _analyze_data(std::ifstream* file, size_t* fsize,
 	fi_fsize_remaining = *fsize;
 	for (fi = 0; fi_fsize_remaining > 0; ++fi)
 	{
+		if ((*_state).terminate_process_requested) return;
+		(*_state).analyzing_task = fi;
+
 		// Set seek position
 		fi_seekfrom = constants::SEGMENT_SEARCH_MEMORY_LIMIT * fi;
 		// Set buffer
@@ -164,6 +169,8 @@ void _analyze_data(std::ifstream* file, size_t* fsize,
 		// ... to preserve the memory limit
 		for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
 		{
+			if ((*_state).terminate_process_requested) return;
+
 			double v = buffer_vals[i];
 
 			if (utils::is_double_valid(v))
@@ -222,6 +229,10 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 	// THe main data iteration
 	do
 	{
+		if ((*_state).terminate_process_requested) return;
+		(*_state).bucket_task++;
+		(*_state).bucket_task_sub = 0;
+
 		// Reset segment counters
 		fi_seekfrom = 0;
 		lows = 0;
@@ -236,6 +247,8 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 		fi_fsize_remaining = *fsize;
 		for (fi = 0; fi_fsize_remaining > 0; ++fi)
 		{
+			(*_state).bucket_task_sub = fi;
+
 			// Set seek position
 			fi_seekfrom = constants::SEGMENT_SEARCH_MEMORY_LIMIT * fi;
 			// Set buffer
@@ -248,6 +261,7 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 			_process_segment_data((double*)buffer, buffer_size / sizeof(double),
 				bucket_pivot_val, *bucket_upper_val, *bucket_lower_val,
 				&lows, &highs, &equals, &pivot_lower_samples, &pivot_upper_samples, &pivot_equal_samples);
+			if ((*_state).terminate_process_requested) return;
 		}
 
 		// Free the last buffer once done
@@ -335,6 +349,9 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 	fi_fsize_remaining = *fsize;
 	for (fi = 0; fi_fsize_remaining > 0; ++fi)
 	{
+		if ((*_state).terminate_process_requested) return;
+		(*_state).percentil_search_task = fi;
+
 		// Set seek position
 		fi_seekfrom = constants::SEGMENT_PICK_MEMORY_LIMIT * fi;
 		// Set buffer
@@ -345,6 +362,8 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 		
 		for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
 		{
+			if ((*_state).terminate_process_requested) return;
+
 			double v = ((double*)buffer)[i];
 			//std::cout << "-> " << v << std::endl;
 
@@ -363,9 +382,13 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 	// Free the last buffer once done
 	_try_free_buffer(&buffer);
 
+	(*_state).percentil_search_done = true;
+	if ((*_state).terminate_process_requested) return;
 	// Quick select (sort)
 	auto m = percentil_bucket.begin() + percentil_bucket_idx;
 	std::nth_element(percentil_bucket.begin(), m, percentil_bucket.end());
+	(*_state).waiting_for_percentil_pickup = true;
+	if ((*_state).terminate_process_requested) return;
 
 	// DEBUG MESSAGES
 	std::cout << "percentil_pos = " << percentil_pos << std::endl;
@@ -386,7 +409,7 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 
 #pragma region Public Process Functions
 
-void worker::run(worker::State state, std::string filePath, int percentil, worker::ProcessingType processingType)
+void worker::run(worker::State* state, std::string filePath, int percentil, worker::ProcessingType processingType)
 {
 	// Assign new state
 	_state = state;
@@ -395,6 +418,10 @@ void worker::run(worker::State state, std::string filePath, int percentil, worke
 	std::ifstream file(filePath, std::ios::binary);
 	if (file.is_open())
 	{
+		if ((*_state).terminate_process_requested) return;
+		(*_state).file_loaded = true;
+		(*_state).terminated = false;
+
 		double percentil_value;
 
 		size_t fsize; // size of the opened data file
@@ -425,6 +452,8 @@ void worker::run(worker::State state, std::string filePath, int percentil, worke
 		std::cout << "Analyzing data..." << std::endl;
 		_analyze_data(&file, &fsize, &total_values, &bucket_lower_val, &bucket_upper_val);
 		std::cout << "Data sucessfully analyzed!" << std::endl << std::endl;
+		(*_state).analyzing_done = true;
+		if ((*_state).terminate_process_requested) return;
 
 		// If the data is NOT sequence of the same single number...
 		if (bucket_lower_val != bucket_upper_val)
@@ -433,6 +462,8 @@ void worker::run(worker::State state, std::string filePath, int percentil, worke
 			std::cout << "Finding lower/upper bucket values according to memory limits..." << std::endl;
 			_find_bucket_limits(&file, &fsize, total_values, percentil, &bucket_lower_val, &bucket_upper_val, &bucket_value_offset, &bucket_total_found);
 			std::cout << "Lower/Upper values successfully found!" << std::endl << std::endl;
+			(*_state).bucket_found = true;
+			if ((*_state).terminate_process_requested) return;
 
 			// Get ending timepoint
 			auto time_stop = std::chrono::high_resolution_clock::now();
@@ -452,12 +483,15 @@ void worker::run(worker::State state, std::string filePath, int percentil, worke
 				std::cout << "Selecting percentil value..." << std::endl;
 				_find_percentil(&file, &fsize, total_values, percentil, bucket_lower_val, bucket_upper_val, bucket_value_offset, bucket_total_found, &percentil_value);
 				std::cout << "Percentil value succesfully selected!" << std::endl << std::endl;
+				if ((*_state).terminate_process_requested) return;
 			}
 			// Otherwise, there is only 1 number...
 			else
 			{
 				// ... so any percentil is any number of the sequence
 				percentil_value = bucket_upper_val;
+				(*_state).percentil_search_done = true;
+				(*_state).waiting_for_percentil_pickup = true;
 			}
 		}
 		// Otherwise, there is only 1 number...
@@ -465,8 +499,12 @@ void worker::run(worker::State state, std::string filePath, int percentil, worke
 		{
 			// ... so any percentil is any number of the sequence
 			percentil_value = bucket_upper_val;
+			(*_state).bucket_found = true;
+			(*_state).percentil_search_done = true;
+			(*_state).waiting_for_percentil_pickup = true;
 		}
 
+		if ((*_state).terminate_process_requested) return;
 		std::cout << "Percentil value = " << percentil_value << std::endl << std::endl;
 
 
@@ -479,6 +517,41 @@ void worker::run(worker::State state, std::string filePath, int percentil, worke
 	}
 
 	mymem::print_counter();
+}
+
+#pragma endregion
+
+
+#pragma region State
+
+worker::State::State()
+{
+	this->set_defaults();
+}
+
+void worker::State::set_defaults()
+{
+	this->terminated = true;
+
+	this->terminate_process_requested = false;
+	this->recovery_requested = false;
+
+	this->file_loaded = false;
+
+	this->analyzing_task = 0;
+	this->analyzing_done = false;
+
+	this->bucket_task_sub = 0;
+	this->bucket_task = 0;
+	this->bucket_found = false;
+
+	this->percentil_search_task = 0;
+	this->percentil_search_done = false; 
+
+	this->waiting_for_percentil_pickup = false;
+
+	this->result_search_task = 0;
+	this->result_search_done = false;
 }
 
 #pragma endregion
