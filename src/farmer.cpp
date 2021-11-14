@@ -1,14 +1,13 @@
-#include <iostream>
-#include <fstream>
-#include <limits>
-#include <random>
-#include <chrono>
 #include "farmer.h"
-#include "mymem.h"
-#include "constants.h"
-#include "utils.h"
 
-#pragma region Private Functions
+#pragma region Private Process Variables
+
+/// UNDONE
+farmer::State _state;
+
+#pragma endregion
+
+#pragma region Private Process Functions
 
 void _try_free_buffer(char** buffer)
 {
@@ -51,15 +50,6 @@ void _fi_set_buffer(char** buffer, size_t* buffer_size, size_t* fi_fsize_remaini
 /// <summary>
 /// UNDONE
 /// </summary>
-/// <param name="values"></param>
-/// <param name="n"></param>
-/// <param name="p"></param>
-/// <param name="h"></param>
-/// <param name="l"></param>
-/// <param name="highs"></param>
-/// <param name="lows"></param>
-/// <param name="pivot_upper_samples"></param>
-/// <param name="pivot_lower_samples"></param>
 void _process_segment_data(double* values, size_t n,
 	double p, double h, double l,
 	size_t* lows, size_t* highs, size_t* equals, std::vector<double>* pivot_lower_samples, std::vector<double>* pivot_upper_samples, std::vector<double>* pivot_equal_samples)
@@ -394,12 +384,15 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 
 #pragma endregion
 
-#pragma region Public Functions
+#pragma region Public Process Functions
 
-void farmer::process(int percentil)
+void farmer::process(State state, std::string filePath, int percentil, ProcessingType processingType)
 {
+	// Assign new state
+	_state = state;
+
 	// Open file
-	std::ifstream file("data/data1.bin", std::ios::binary);
+	std::ifstream file(filePath, std::ios::binary);
 	if (file.is_open())
 	{
 		double percentil_value;

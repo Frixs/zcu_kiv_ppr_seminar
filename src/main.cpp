@@ -2,15 +2,26 @@
 #include <fstream>
 #include <iterator>
 #include <algorithm>
+#include <future>
 #include "mymem.h"
 #include "farmer.h"
+#include "watchdog.h"
+
 
 // TODO: check file has some required minimum file size
 
 int main()
 {
 	std::cout << "Starting...\n\n";
-	farmer::process(35);
+	
+	// Create new state values
+	auto state = farmer::State();
+	
+	// Start watchdog
+	auto watchdog_res = std::async(watchdog::run, state);
+
+	// Start processing
+	farmer::process(state, "data/data4.bin", 35, farmer::ProcessingType::SingleThread);
 
 
 

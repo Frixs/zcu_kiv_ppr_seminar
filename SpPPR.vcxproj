@@ -145,6 +145,7 @@
     <ClCompile Include="src\manager.cpp" />
     <ClCompile Include="src\mymem.cpp" />
     <ClCompile Include="src\utils.cpp" />
+    <ClCompile Include="src\watchdog.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\constants.h" />
@@ -152,6 +153,7 @@
     <ClInclude Include="src\manager.h" />
     <ClInclude Include="src\mymem.h" />
     <ClInclude Include="src\utils.h" />
+    <ClInclude Include="src\watchdog.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
