@@ -9,6 +9,8 @@
 #include "constants.h"
 #include "utils.h"
 
+#include "tbb/parallel_for.h"
+
 namespace worker
 {
 	/// <summary>

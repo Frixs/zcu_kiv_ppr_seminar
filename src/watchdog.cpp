@@ -147,6 +147,12 @@ int watchdog::run(worker::State* state)
 				{
 					(*state).recovery_requested = true;
 					watchdog_state.recovery_tries++;
+					watchdog_state.strikes = 0;
+					watchdog_state.analyzing_task = 0;
+					watchdog_state.bucket_task_sub = 0;
+					watchdog_state.bucket_task = 0;
+					watchdog_state.percentil_search_task = 0;
+					watchdog_state.result_search_task = 0;
 
 					std::cout << "##################################################" << std::endl;
 					std::cout << "[WATCHDOG] Trying to start the job again..." << std::endl;
