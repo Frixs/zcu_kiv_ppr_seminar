@@ -1,6 +1,6 @@
 #include "worker.h"
 
-#pragma region Private Process Variables
+#pragma region Process Variables
 
 /// State values of the currently processing worker
 worker::State* _state;
@@ -10,7 +10,7 @@ worker::ProcessingType* _processing_type;
 
 #pragma endregion
 
-#pragma region Private Process Functions
+#pragma region General Functions
 
 /// <summary>
 /// Frees buffer, if any.
@@ -52,6 +52,82 @@ void _fi_set_buffer(char** buffer, size_t* buffer_size, size_t* fi_fsize_remaini
 		*fi_fsize_remaining = 0;
 	}
 }
+
+#pragma endregion
+
+#pragma region 1. Analyzing Data
+
+/// <summary>
+/// 1. part of the algorithm - analyze data to get necessary data for further processing.
+/// </summary>
+void _analyze_data(std::ifstream* file, size_t* fsize,
+	size_t* total_values, double* bucket_lower_val, double* bucket_upper_val)
+{
+	size_t fi; // data file iterator
+	size_t fi_fsize_remaining; // data file iterator counter based on remaining file size to read
+	std::streamoff fi_seekfrom = 0;
+
+	char* buffer = nullptr;
+	size_t buffer_size = 0;
+
+	fi_fsize_remaining = *fsize;
+	for (fi = 0; fi_fsize_remaining > 0; ++fi)
+	{
+		if ((*_state).terminate_process_requested) return;
+		(*_state).analyzing_task = fi;
+
+		// Set seek position
+		fi_seekfrom = constants::SEGMENT_SEARCH_MEMORY_LIMIT * fi;
+		// Set buffer
+		_fi_set_buffer(&buffer, &buffer_size, &fi_fsize_remaining, constants::SEGMENT_SEARCH_MEMORY_LIMIT);
+		// Read data into buffer
+		(*file).seekg(fi_seekfrom, std::ios::beg);
+		(*file).read(buffer, buffer_size);
+		// Get values from the buffer
+		double* buffer_vals = (double*)buffer;
+
+		// Iterate over the segments
+		// ... to preserve the memory limit
+		for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
+		{
+			if ((*_state).terminate_process_requested) return;
+
+			double v = buffer_vals[i];
+
+			if (utils::is_double_valid(v))
+			{
+				(*total_values)++;
+
+				// Look for UPPER bucket value
+				if (*bucket_upper_val < +(std::numeric_limits<double>::infinity()))
+				{
+					if (v > *bucket_upper_val)
+						*bucket_upper_val = v;
+				}
+				// Otherwise, set it for the first time...
+				else
+					*bucket_upper_val = v;
+
+				// Look for LOWER bucket value
+				if (*bucket_lower_val > -(std::numeric_limits<double>::infinity()))
+				{
+					if (v < *bucket_lower_val)
+						*bucket_lower_val = v;
+				}
+				// Otherwise, set it for the first time...
+				else
+					*bucket_lower_val = v;
+			}
+		}
+
+		// Free the last buffer once done
+		_try_free_buffer(&buffer);
+	}
+}
+
+#pragma endregion
+
+#pragma region 2. Find Bucket Limits
 
 /// <summary>
 /// Processing logic for each value that processed in _process_segment_data()
@@ -203,74 +279,6 @@ void _process_segment_data(double* values, size_t n,
 }
 
 /// <summary>
-/// 1. part of the algorithm - analyze data to get necessary data for further processing.
-/// </summary>
-void _analyze_data(std::ifstream* file, size_t* fsize,
-	size_t* total_values, double* bucket_lower_val, double* bucket_upper_val)
-{
-	size_t fi; // data file iterator
-	size_t fi_fsize_remaining; // data file iterator counter based on remaining file size to read
-	std::streamoff fi_seekfrom = 0;
-
-	char* buffer = nullptr;
-	size_t buffer_size = 0;
-
-	fi_fsize_remaining = *fsize;
-	for (fi = 0; fi_fsize_remaining > 0; ++fi)
-	{
-		if ((*_state).terminate_process_requested) return;
-		(*_state).analyzing_task = fi;
-
-		// Set seek position
-		fi_seekfrom = constants::SEGMENT_SEARCH_MEMORY_LIMIT * fi;
-		// Set buffer
-		_fi_set_buffer(&buffer, &buffer_size, &fi_fsize_remaining, constants::SEGMENT_SEARCH_MEMORY_LIMIT);
-		// Read data into buffer
-		(*file).seekg(fi_seekfrom, std::ios::beg);
-		(*file).read(buffer, buffer_size);
-		// Get values from the buffer
-		double* buffer_vals = (double*)buffer;
-
-		// Iterate over the segments
-		// ... to preserve the memory limit
-		for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
-		{
-			if ((*_state).terminate_process_requested) return;
-
-			double v = buffer_vals[i];
-
-			if (utils::is_double_valid(v))
-			{
-				(*total_values)++;
-
-				// Look for UPPER bucket value
-				if (*bucket_upper_val < +(std::numeric_limits<double>::infinity()))
-				{
-					if (v > *bucket_upper_val)
-						*bucket_upper_val = v;
-				}
-				// Otherwise, set it for the first time...
-				else
-					*bucket_upper_val = v;
-
-				// Look for LOWER bucket value
-				if (*bucket_lower_val > -(std::numeric_limits<double>::infinity()))
-				{
-					if (v < *bucket_lower_val)
-						*bucket_lower_val = v;
-				}
-				// Otherwise, set it for the first time...
-				else
-					*bucket_lower_val = v;
-			}
-		}
-
-		// Free the last buffer once done
-		_try_free_buffer(&buffer);
-	}
-}
-
-/// <summary>
 /// 2. part of the algorithm - find limit upper and lower value to specify range for the final bucket that can be read in limited memory.
 /// </summary>
 void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values, int percentil,
@@ -391,6 +399,10 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 	} while (*bucket_total_found * sizeof(double) > constants::SEGMENT_SEARCH_MEMORY_LIMIT); // if there is need for the next segment calculations...
 }
 
+#pragma endregion
+
+#pragma region 3. Find Percentil
+
 /// <summary>
 /// 3. part of the algorithm - find percentil value in the data file based on limit upper and lower value.
 /// </summary>
@@ -473,7 +485,7 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 
 #pragma endregion
 
-#pragma region Public Process Functions
+#pragma region Process Functions
 
 void worker::run(worker::State* state, std::string filePath, int percentil, worker::ProcessingType* processing_type)
 {
