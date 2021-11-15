@@ -25,7 +25,7 @@ int main()
 	do
 	{
 		state.set_defaults();
-		worker::run(&state, "data/data5.bin", 35, &processing_type);
+		worker::run(&state, "data/data1.bin", 35, &processing_type);
 	} while (state.recovery_requested);
 
 

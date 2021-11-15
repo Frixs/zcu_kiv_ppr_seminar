@@ -2,6 +2,9 @@
 
 #pragma region Process Variables
 
+/// Global mutex for iterations
+std::mutex _i_mutex;
+
 /// State values of the currently processing worker
 worker::State* _state;
 
@@ -11,6 +14,14 @@ worker::ProcessingType* _processing_type;
 #pragma endregion
 
 #pragma region General Functions
+
+/// <summary>
+/// Generate random number from 0 to max.
+/// </summary>
+size_t _rand(size_t max)
+{
+	return rand() % (max + 1); // 0 .. max
+}
 
 /// <summary>
 /// Frees buffer, if any.
@@ -58,6 +69,40 @@ void _fi_set_buffer(char** buffer, size_t* buffer_size, size_t* fi_fsize_remaini
 #pragma region 1. Analyzing Data
 
 /// <summary>
+/// Processing logic for each value that processed in _analyze_data()
+/// </summary>
+void _analyze_data_job(double* buffer, size_t i,
+	size_t* total_values, double* bucket_lower_val, double* bucket_upper_val)
+{
+	double v = buffer[i];
+
+	if (utils::is_double_valid(v))
+	{
+		(*total_values)++;
+
+		// Look for UPPER bucket value
+		if (*bucket_upper_val < +(std::numeric_limits<double>::infinity()))
+		{
+			if (v > *bucket_upper_val)
+				*bucket_upper_val = v;
+		}
+		// Otherwise, set it for the first time...
+		else
+			*bucket_upper_val = v;
+
+		// Look for LOWER bucket value
+		if (*bucket_lower_val > -(std::numeric_limits<double>::infinity()))
+		{
+			if (v < *bucket_lower_val)
+				*bucket_lower_val = v;
+		}
+		// Otherwise, set it for the first time...
+		else
+			*bucket_lower_val = v;
+	}
+}
+
+/// <summary>
 /// 1. part of the algorithm - analyze data to get necessary data for further processing.
 /// </summary>
 void _analyze_data(std::ifstream* file, size_t* fsize,
@@ -86,37 +131,35 @@ void _analyze_data(std::ifstream* file, size_t* fsize,
 		// Get values from the buffer
 		double* buffer_vals = (double*)buffer;
 
-		// Iterate over the segments
-		// ... to preserve the memory limit
-		for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
+		// If multithread processing...
+		if (*_processing_type == worker::ProcessingType::MultiThread)
 		{
-			if ((*_state).terminate_process_requested) return;
-
-			double v = buffer_vals[i];
-
-			if (utils::is_double_valid(v))
+			// Parallel work (job)
+			auto work = [&](tbb::blocked_range<size_t> it)
 			{
-				(*total_values)++;
-
-				// Look for UPPER bucket value
-				if (*bucket_upper_val < +(std::numeric_limits<double>::infinity()))
+				for (size_t i = it.begin(); i < it.end(); ++i)
 				{
-					if (v > *bucket_upper_val)
-						*bucket_upper_val = v;
-				}
-				// Otherwise, set it for the first time...
-				else
-					*bucket_upper_val = v;
+					if ((*_state).terminate_process_requested) return;
 
-				// Look for LOWER bucket value
-				if (*bucket_lower_val > -(std::numeric_limits<double>::infinity()))
-				{
-					if (v < *bucket_lower_val)
-						*bucket_lower_val = v;
+					// Do the job
+					_analyze_data_job(buffer_vals, i, total_values, bucket_lower_val, bucket_upper_val);
 				}
-				// Otherwise, set it for the first time...
-				else
-					*bucket_lower_val = v;
+			};
+
+			// Process buffer chunks in parallel
+			tbb::parallel_for(tbb::blocked_range<std::size_t>(0, buffer_size / sizeof(double)), work);
+		}
+		// Otherwise, rest processing types...
+		else
+		{
+			// Iterate over the segments
+			// ... to preserve the memory limit
+			for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
+			{
+				if ((*_state).terminate_process_requested) return;
+
+				// Do the job
+				_analyze_data_job(buffer_vals, i, total_values, bucket_lower_val, bucket_upper_val);
 			}
 		}
 
@@ -138,7 +181,7 @@ void _process_segment_data_job(double* values, size_t i,
 {
 	double v = values[i];
 	//std::cout << "-> " << v << std::endl;
-
+	
 	if (utils::is_double_valid(v))
 	{
 		// Check the limits
@@ -150,7 +193,7 @@ void _process_segment_data_job(double* values, size_t i,
 				// If next number to highs (+ increment highs)...
 				if ((*highs_local)++ > 0)
 				{
-					if (i == rand() % (i + 1)) // 0 .. i
+					if (i == _rand(i)) // 0 .. i
 						*upper_pivot_sample = v;
 				}
 				// Otherwise, first number to highs...
@@ -163,7 +206,7 @@ void _process_segment_data_job(double* values, size_t i,
 				// If next number to lows (+ increment lows)...
 				if ((*lows_local)++ > 0)
 				{
-					if (i == rand() % (i + 1)) // 0 .. i
+					if (i == _rand(i)) // 0 .. i
 						*lower_pivot_sample = v;
 				}
 				// Otherwise, first number to lows...
@@ -176,7 +219,7 @@ void _process_segment_data_job(double* values, size_t i,
 				// If next number to equals (+ increment equals)...
 				if ((*equals_local)++ > 0)
 				{
-					if (i == rand() % (i + 1)) // 0 .. i
+					if (i == _rand(i)) // 0 .. i
 						*equal_pivot_sample = v;
 				}
 				// Otherwise, first number to equals...
@@ -193,6 +236,8 @@ void _process_segment_data_job(double* values, size_t i,
 void _process_segment_data_count(size_t lows_local, size_t highs_local, size_t equals_local, double lower_pivot_sample, double upper_pivot_sample, double equal_pivot_sample,
 	size_t* lows, size_t* highs, size_t* equals, std::vector<double>* pivot_lower_samples, std::vector<double>* pivot_upper_samples, std::vector<double>* pivot_equal_samples)
 {
+	const std::lock_guard<std::mutex> lock(_i_mutex);
+
 	// Select next segment pivot samples
 	if (lows_local > 0)
 		pivot_lower_samples->push_back(lower_pivot_sample);
@@ -237,7 +282,7 @@ void _process_segment_data(double* values, size_t n,
 					p, h, l,
 					&lows_local, &highs_local, &equals_local, &lower_pivot_sample, &upper_pivot_sample, &equal_pivot_sample);
 			}
-
+			
 			// Count the job values
 			_process_segment_data_count(lows_local, highs_local, equals_local, lower_pivot_sample, upper_pivot_sample, equal_pivot_sample,
 				lows, highs, equals, pivot_lower_samples, pivot_upper_samples, pivot_equal_samples);
@@ -404,6 +449,28 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 #pragma region 3. Find Percentil
 
 /// <summary>
+/// Processing logic for each value that processed in _find_percentil()
+/// </summary>
+void _find_percentil_job(double* buffer, size_t i,
+	std::vector<double>* percentil_bucket, size_t* iv, double bucket_lower_val, double bucket_upper_val)
+{
+	const std::lock_guard<std::mutex> lock(_i_mutex);
+
+	double v = buffer[i];
+	//std::cout << "-> " << v << std::endl;
+
+	if (utils::is_double_valid(v))
+	{
+		// Check the limits
+		if (v >= bucket_lower_val && v <= bucket_upper_val)
+		{
+			(*percentil_bucket)[*iv] = v;
+			(*iv)++;
+		}
+	}
+}
+
+/// <summary>
 /// 3. part of the algorithm - find percentil value in the data file based on limit upper and lower value.
 /// </summary>
 void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, int percentil, double bucket_lower_val, double bucket_upper_val, size_t bucket_value_offset, size_t bucket_total_found,
@@ -438,21 +505,35 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 		(*file).seekg(fi_seekfrom, std::ios::beg);
 		(*file).read(buffer, buffer_size);
 
-		for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
+		// If multithread processing...
+		if (*_processing_type == worker::ProcessingType::MultiThread)
 		{
-			if ((*_state).terminate_process_requested) return;
-
-			double v = ((double*)buffer)[i];
-			//std::cout << "-> " << v << std::endl;
-
-			if (utils::is_double_valid(v))
+			// Parallel work (job)
+			auto work = [&](tbb::blocked_range<size_t> it)
 			{
-				// Check the limits
-				if (v >= bucket_lower_val && v <= bucket_upper_val)
+				for (size_t i = it.begin(); i < it.end(); ++i)
 				{
-					percentil_bucket[iv] = v;
-					iv++;
+					if ((*_state).terminate_process_requested) return;
+
+					// Do the job
+					_find_percentil_job((double*)buffer, i, &percentil_bucket, &iv, bucket_lower_val, bucket_upper_val);
 				}
+			};
+
+			// Process buffer chunks in parallel
+			tbb::parallel_for(tbb::blocked_range<std::size_t>(0, buffer_size / sizeof(double)), work);
+		}
+		// Otherwise, rest processing types...
+		else
+		{
+			// Iterate over the segments
+			// ... to preserve the memory limit
+			for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
+			{
+				if ((*_state).terminate_process_requested) return;
+
+				// Do the job
+				_find_percentil_job((double*)buffer, i, &percentil_bucket, &iv, bucket_lower_val, bucket_upper_val);
 			}
 		}
 	}
@@ -600,7 +681,6 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 }
 
 #pragma endregion
-
 
 #pragma region State
 
