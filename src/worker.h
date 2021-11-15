@@ -15,7 +15,7 @@
 namespace worker
 {
 	/// <summary>
-	/// UNDONE
+	/// Processing type of the algorithm
 	/// </summary>
 	enum class ProcessingType
 	{
@@ -25,7 +25,7 @@ namespace worker
 	};
 
 	/// <summary>
-	/// UNDONE
+	/// State values of the algorithm
 	/// </summary>
 	class State
 	{

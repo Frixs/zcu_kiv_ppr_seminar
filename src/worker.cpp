@@ -2,16 +2,19 @@
 
 #pragma region Private Process Variables
 
-/// UNDONE
+/// State values of the currently processing worker
 worker::State* _state;
 
-/// UNDONE
+/// Processing type of the currently processing worker
 worker::ProcessingType* _processing_type;
 
 #pragma endregion
 
 #pragma region Private Process Functions
 
+/// <summary>
+/// Frees buffer, if any.
+/// </summary>
 void _try_free_buffer(char** buffer)
 {
 	// Free buffer from previous calculation...
@@ -51,7 +54,7 @@ void _fi_set_buffer(char** buffer, size_t* buffer_size, size_t* fi_fsize_remaini
 }
 
 /// <summary>
-/// UNDONE
+/// Processing logic for each value that processed in _process_segment_data()
 /// </summary>
 void _process_segment_data_job(double* values, size_t i,
 	double p, double h, double l,
@@ -109,7 +112,7 @@ void _process_segment_data_job(double* values, size_t i,
 }
 
 /// <summary>
-/// UNDONE
+/// Counts the result from all jobs made in _process_segment_data()
 /// </summary>
 void _process_segment_data_count(size_t lows_local, size_t highs_local, size_t equals_local, double lower_pivot_sample, double upper_pivot_sample, double equal_pivot_sample,
 	size_t* lows, size_t* highs, size_t* equals, std::vector<double>* pivot_lower_samples, std::vector<double>* pivot_upper_samples, std::vector<double>* pivot_equal_samples)
@@ -129,7 +132,8 @@ void _process_segment_data_count(size_t lows_local, size_t highs_local, size_t e
 }
 
 /// <summary>
-/// UNDONE
+/// Processes values (segment of the input data based on limited memory / chunk) to get number of lower, greater, and equal values to the inputing pivot based on limit upper and lower values.
+/// For each of the selecting classes, it also selects posible pivots.
 /// </summary>
 void _process_segment_data(double* values, size_t n,
 	double p, double h, double l,
@@ -199,7 +203,7 @@ void _process_segment_data(double* values, size_t n,
 }
 
 /// <summary>
-/// UNDONE
+/// 1. part of the algorithm - analyze data to get necessary data for further processing.
 /// </summary>
 void _analyze_data(std::ifstream* file, size_t* fsize,
 	size_t* total_values, double* bucket_lower_val, double* bucket_upper_val)
@@ -267,7 +271,7 @@ void _analyze_data(std::ifstream* file, size_t* fsize,
 }
 
 /// <summary>
-/// UNDONE
+/// 2. part of the algorithm - find limit upper and lower value to specify range for the final bucket that can be read in limited memory.
 /// </summary>
 void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values, int percentil,
 	double* bucket_lower_val, double* bucket_upper_val, size_t* bucket_value_offset, size_t* bucket_total_found)
@@ -388,7 +392,7 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 }
 
 /// <summary>
-/// UNDONE
+/// 3. part of the algorithm - find percentil value in the data file based on limit upper and lower value.
 /// </summary>
 void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, int percentil, double bucket_lower_val, double bucket_upper_val, size_t bucket_value_offset, size_t bucket_total_found,
 	double* percentil_value)

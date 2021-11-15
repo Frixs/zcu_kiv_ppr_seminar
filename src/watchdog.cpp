@@ -1,17 +1,17 @@
 #include "watchdog.h"
 
 /// <summary>
-/// UNDONE
+/// Max fails that watchdog can accept in a row
 /// </summary>
 const size_t MAX_STRIKES = 3;
 
 /// <summary>
-/// UNDONE
+/// Max tries for recovery
 /// </summary>
 const size_t MAX_RECOVERY_TRIES = 1;
 
 /// <summary>
-/// UNDONE
+/// State watchdog strcuture
 /// </summary>
 struct t_watchdog_state
 {
@@ -25,7 +25,7 @@ struct t_watchdog_state
 } watchdog_state{};
 
 /// <summary>
-/// UNDONE
+/// Sets the strikes
 /// </summary>
 void _set_strike(t_watchdog_state* watchdog_state, bool up)
 {
@@ -36,7 +36,7 @@ void _set_strike(t_watchdog_state* watchdog_state, bool up)
 }
 
 /// <summary>
-/// UNDONE
+/// The main test function
 /// </summary>
 int _test(worker::State* state, t_watchdog_state* watchdog_state)
 {
@@ -124,7 +124,7 @@ int _test(worker::State* state, t_watchdog_state* watchdog_state)
 }
 
 /// <summary>
-/// UNDONE
+/// Run watchdog
 /// </summary>
 int watchdog::run(worker::State* state)
 {
