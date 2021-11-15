@@ -169,6 +169,9 @@ int watchdog::run(worker::State* state)
 			// Done
 			else if (res == 0)
 			{
+				std::cout << "##################################################" << std::endl;
+				std::cout << "[WATCHDOG] All OK. Shutting down..." << std::endl;
+				std::cout << "##################################################" << std::endl;
 				break;
 			}
 			// Otherwise, processing ok...

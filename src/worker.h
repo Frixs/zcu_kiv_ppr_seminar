@@ -10,6 +10,7 @@
 #include "utils.h"
 
 #include "tbb/parallel_for.h"
+#include "tbb/combinable.h"
 
 namespace worker
 {
@@ -58,5 +59,5 @@ namespace worker
 	/// <summary>
 	/// UNDONE
 	/// </summary>
-	void run(State* state, std::string filePath, int percentil, ProcessingType processingType);
+	void run(State* state, std::string filePath, int percentil, ProcessingType* processing_type);
 }

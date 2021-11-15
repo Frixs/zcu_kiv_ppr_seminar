@@ -5,6 +5,9 @@
 /// UNDONE
 worker::State* _state;
 
+/// UNDONE
+worker::ProcessingType* _processing_type;
+
 #pragma endregion
 
 #pragma region Private Process Functions
@@ -50,96 +53,155 @@ void _fi_set_buffer(char** buffer, size_t* buffer_size, size_t* fi_fsize_remaini
 /// <summary>
 /// UNDONE
 /// </summary>
-void _process_segment_data(double* values, size_t n,
+void _process_segment_data_job(double* values, size_t i,
 	double p, double h, double l,
-	size_t* lows, size_t* highs, size_t* equals, std::vector<double>* pivot_lower_samples, std::vector<double>* pivot_upper_samples, std::vector<double>* pivot_equal_samples)
+	size_t* lows_local, size_t* highs_local, size_t* equals_local, double* lower_pivot_sample, double* upper_pivot_sample, double* equal_pivot_sample)
 {
-	size_t curr_lows = 0;
-	size_t curr_highs = 0;
-	size_t curr_equals = 0;
-	double lower_pivot_sample;
-	double upper_pivot_sample;
-	double equal_pivot_sample;
+	double v = values[i];
+	//std::cout << "-> " << v << std::endl;
 
-	for (size_t i = 0; i < n; ++i)
+	if (utils::is_double_valid(v))
 	{
-		if ((*_state).terminate_process_requested) return;
-
-		double v = values[i];
-		//std::cout << "-> " << v << std::endl;
-
-		if (utils::is_double_valid(v))
+		// Check the limits
+		if (v >= l && v <= h)
 		{
-			// Check the limits
-			if (v >= l && v <= h)
+			// Greater than pivot...
+			if (v > p)
 			{
-				// Greater than pivot...
-				if (v > p)
+				// If next number to highs (+ increment highs)...
+				if ((*highs_local)++ > 0)
 				{
-					// If next number to highs (+ increment highs)...
-					if (curr_highs++ > 0)
-					{
-						if (i == rand() % (i + 1)) // 0 .. i
-							upper_pivot_sample = v;
-					}
-					// Otherwise, first number to highs...
-					else
-						upper_pivot_sample = v;
+					if (i == rand() % (i + 1)) // 0 .. i
+						*upper_pivot_sample = v;
 				}
-				// Lower than pivot...
-				else if (v < p)
-				{
-					// If next number to lows (+ increment lows)...
-					if (curr_lows++ > 0)
-					{
-						if (i == rand() % (i + 1)) // 0 .. i
-							lower_pivot_sample = v;
-					}
-					// Otherwise, first number to lows...
-					else
-						lower_pivot_sample = v;
-				}
-				// Otherwise, equal to pivot...
+				// Otherwise, first number to highs...
 				else
+					*upper_pivot_sample = v;
+			}
+			// Lower than pivot...
+			else if (v < p)
+			{
+				// If next number to lows (+ increment lows)...
+				if ((*lows_local)++ > 0)
 				{
-					// If next number to equals (+ increment equals)...
-					if (curr_equals++ > 0)
-					{
-						if (i == rand() % (i + 1)) // 0 .. i
-							equal_pivot_sample = v;
-					}
-					// Otherwise, first number to equals...
-					else
-						equal_pivot_sample = v;
+					if (i == rand() % (i + 1)) // 0 .. i
+						*lower_pivot_sample = v;
 				}
+				// Otherwise, first number to lows...
+				else
+					*lower_pivot_sample = v;
+			}
+			// Otherwise, equal to pivot...
+			else
+			{
+				// If next number to equals (+ increment equals)...
+				if ((*equals_local)++ > 0)
+				{
+					if (i == rand() % (i + 1)) // 0 .. i
+						*equal_pivot_sample = v;
+				}
+				// Otherwise, first number to equals...
+				else
+					*equal_pivot_sample = v;
 			}
 		}
 	}
-
-	// Select next segment pivot samples
-	if (curr_lows > 0)
-		pivot_lower_samples->push_back(lower_pivot_sample);
-	if (curr_highs > 0)
-		pivot_upper_samples->push_back(upper_pivot_sample);
-	if (curr_equals > 0)
-		pivot_equal_samples->push_back(equal_pivot_sample);
-
-	// Update counters
-	*lows += curr_lows;
-	*highs += curr_highs;
-	*equals += curr_equals;
-
-	std::cout << "* Pivot: " << p << "\n";
-	std::cout << "- Lows: " << *lows << "(+" << curr_lows << ")\n";
-	std::cout << "+ Highs: " << *highs << "(+" << curr_highs << ")\n";
-	std::cout << "= Equals: " << *equals << "(+" << curr_equals << ")\n";
-	std::cout << "==> L+H+E: " << (*lows + *highs + *equals) << "\n";
 }
 
 /// <summary>
 /// UNDONE
 /// </summary>
-void _analyze_data(std::ifstream* file, size_t* fsize, 
+void _process_segment_data_count(size_t lows_local, size_t highs_local, size_t equals_local, double lower_pivot_sample, double upper_pivot_sample, double equal_pivot_sample,
+	size_t* lows, size_t* highs, size_t* equals, std::vector<double>* pivot_lower_samples, std::vector<double>* pivot_upper_samples, std::vector<double>* pivot_equal_samples)
+{
+	// Select next segment pivot samples
+	if (lows_local > 0)
+		pivot_lower_samples->push_back(lower_pivot_sample);
+	if (highs_local > 0)
+		pivot_upper_samples->push_back(upper_pivot_sample);
+	if (equals_local > 0)
+		pivot_equal_samples->push_back(equal_pivot_sample);
+
+	// Update counters
+	*lows += lows_local;
+	*highs += highs_local;
+	*equals += equals_local;
+}
+
+/// <summary>
+/// UNDONE
+/// </summary>
+void _process_segment_data(double* values, size_t n,
+	double p, double h, double l,
+	size_t* lows, size_t* highs, size_t* equals, std::vector<double>* pivot_lower_samples, std::vector<double>* pivot_upper_samples, std::vector<double>* pivot_equal_samples)
+{
+	// If multithread processing...
+	if (*_processing_type == worker::ProcessingType::MultiThread)
+	{
+		// Parallel work (job)
+		auto work = [&](tbb::blocked_range<size_t> it)
+		{
+			size_t lows_local = 0;
+			size_t highs_local = 0;
+			size_t equals_local = 0;
+			double lower_pivot_sample = 0;
+			double upper_pivot_sample = 0;
+			double equal_pivot_sample = 0;
+
+			for (size_t i = it.begin(); i < it.end(); ++i)
+			{
+				if ((*_state).terminate_process_requested) return;
+
+				// Do the job
+				_process_segment_data_job(values, i,
+					p, h, l,
+					&lows_local, &highs_local, &equals_local, &lower_pivot_sample, &upper_pivot_sample, &equal_pivot_sample);
+			}
+
+			// Count the job values
+			_process_segment_data_count(lows_local, highs_local, equals_local, lower_pivot_sample, upper_pivot_sample, equal_pivot_sample,
+				lows, highs, equals, pivot_lower_samples, pivot_upper_samples, pivot_equal_samples);
+		};
+
+		// Process buffer chunks in parallel
+		tbb::parallel_for(tbb::blocked_range<std::size_t>(0, n), work);
+	}
+	// Otherwise, rest processing types...
+	else
+	{
+		size_t lows_local = 0;
+		size_t highs_local = 0;
+		size_t equals_local = 0;
+		double lower_pivot_sample = 0;
+		double upper_pivot_sample = 0;
+		double equal_pivot_sample = 0;
+
+		for (size_t i = 0; i < n; ++i)
+		{
+			if ((*_state).terminate_process_requested) return;
+
+			// Do the job
+			_process_segment_data_job(values, i,
+				p, h, l,
+				&lows_local, &highs_local, &equals_local, &lower_pivot_sample, &upper_pivot_sample, &equal_pivot_sample);
+		}
+
+		// Count the job values
+		_process_segment_data_count(lows_local, highs_local, equals_local, lower_pivot_sample, upper_pivot_sample, equal_pivot_sample,
+			lows, highs, equals, pivot_lower_samples, pivot_upper_samples, pivot_equal_samples);
+
+		std::cout << "* Pivot: " << p << "\n";
+		std::cout << "- Lows: " << *lows << "(+" << lows_local << ")\n";
+		std::cout << "+ Highs: " << *highs << "(+" << highs_local << ")\n";
+		std::cout << "= Equals: " << *equals << "(+" << equals_local << ")\n";
+		std::cout << "==> L+H+E: " << (*lows + *highs + *equals) << "\n";
+	}
+}
+
+/// <summary>
+/// UNDONE
+/// </summary>
+void _analyze_data(std::ifstream* file, size_t* fsize,
 	size_t* total_values, double* bucket_lower_val, double* bucket_upper_val)
 {
 	size_t fi; // data file iterator
@@ -207,7 +269,7 @@ void _analyze_data(std::ifstream* file, size_t* fsize,
 /// <summary>
 /// UNDONE
 /// </summary>
-void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values, int percentil, 
+void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values, int percentil,
 	double* bucket_lower_val, double* bucket_upper_val, size_t* bucket_value_offset, size_t* bucket_total_found)
 {
 	size_t fi; // data file iterator
@@ -218,7 +280,7 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 	size_t buffer_size = 0;
 
 	float pctp_offset = 0; // offset % from the lowest (initial) limit to the current one; it maintain percentil position in all data sequence
-	
+
 	double bucket_pivot_val = 0; // initial pivot value of currently calculated bucket
 	size_t lows = 0; // Bucket numers lower than pivot
 	size_t highs = 0; // Bucket numbers greater than pivot
@@ -284,7 +346,7 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 			{
 				*bucket_lower_val = bucket_pivot_val;
 				pivot_upper_samples.insert(pivot_upper_samples.end(), pivot_equal_samples.begin(), pivot_equal_samples.end());
-				bucket_pivot_val = utils::select_r_item(pivot_upper_samples, pivot_upper_samples.size());
+				bucket_pivot_val = utils::select_r_item(pivot_upper_samples, (int)pivot_upper_samples.size());
 				pctp_offset += pctp_lower;
 				*bucket_value_offset += lows;
 				std::cout << "=== UPPER GOES NEXT ==========================" << "\n";
@@ -301,7 +363,7 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 			{
 				*bucket_upper_val = bucket_pivot_val;
 				pivot_lower_samples.insert(pivot_lower_samples.end(), pivot_equal_samples.begin(), pivot_equal_samples.end());
-				bucket_pivot_val = utils::select_r_item(pivot_lower_samples, pivot_lower_samples.size());
+				bucket_pivot_val = utils::select_r_item(pivot_lower_samples, (int)pivot_lower_samples.size());
 				std::cout << "=== LOWER GOES NEXT ==========================" << "\n";
 			}
 
@@ -328,7 +390,7 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 /// <summary>
 /// UNDONE
 /// </summary>
-void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, int percentil, double bucket_lower_val, double bucket_upper_val, size_t bucket_value_offset, size_t bucket_total_found, 
+void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, int percentil, double bucket_lower_val, double bucket_upper_val, size_t bucket_value_offset, size_t bucket_total_found,
 	double* percentil_value)
 {
 	size_t fi; // data file iterator
@@ -359,7 +421,7 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 		// Read data into buffer
 		(*file).seekg(fi_seekfrom, std::ios::beg);
 		(*file).read(buffer, buffer_size);
-		
+
 		for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
 		{
 			if ((*_state).terminate_process_requested) return;
@@ -409,10 +471,12 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 
 #pragma region Public Process Functions
 
-void worker::run(worker::State* state, std::string filePath, int percentil, worker::ProcessingType processingType)
+void worker::run(worker::State* state, std::string filePath, int percentil, worker::ProcessingType* processing_type)
 {
 	// Assign new state
 	_state = state;
+	_processing_type = processing_type;
+	// TODO: tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
 
 	// Open file
 	std::ifstream file(filePath, std::ios::binary);
@@ -475,7 +539,7 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 
 			std::cout << "Time taken to select final bucket: "
 				<< duration.count() << " seconds" << std::endl << std::endl;
-			
+
 			// If the data is NOT sequence of the same single number...
 			if (bucket_lower_val != bucket_upper_val)
 			{
@@ -546,7 +610,7 @@ void worker::State::set_defaults()
 	this->bucket_found = false;
 
 	this->percentil_search_task = 0;
-	this->percentil_search_done = false; 
+	this->percentil_search_done = false;
 
 	this->waiting_for_percentil_pickup = false;
 

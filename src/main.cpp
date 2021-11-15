@@ -16,6 +16,7 @@ int main()
 	
 	// Create new state values
 	auto state = worker::State();
+	worker::ProcessingType processing_type = worker::ProcessingType::MultiThread;
 	
 	// Start watchdog
 	auto watchdog_res = std::async(watchdog::run, &state);
@@ -24,7 +25,7 @@ int main()
 	do
 	{
 		state.set_defaults();
-		worker::run(&state, "data/data4.bin", 35, worker::ProcessingType::SingleThread);
+		worker::run(&state, "data/data5.bin", 35, &processing_type);
 	} while (state.recovery_requested);
 
 
