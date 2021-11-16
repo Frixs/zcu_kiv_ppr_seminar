@@ -134,20 +134,27 @@ void _analyze_data(std::ifstream* file, size_t* fsize,
 		// If multithread processing...
 		if (*_processing_type == worker::ProcessingType::MultiThread)
 		{
+			tbb::combinable<size_t> total_values_comb(0);
+
 			// Parallel work (job)
 			auto work = [&](tbb::blocked_range<size_t> it)
 			{
+				size_t& total_values_local = total_values_comb.local();
+
 				for (size_t i = it.begin(); i < it.end(); ++i)
 				{
 					if ((*_state).terminate_process_requested) return;
 
 					// Do the job
-					_analyze_data_job(buffer_vals, i, total_values, bucket_lower_val, bucket_upper_val);
+					_analyze_data_job(buffer_vals, i, &total_values_local, bucket_lower_val, bucket_upper_val);
 				}
 			};
 
 			// Process buffer chunks in parallel
 			tbb::parallel_for(tbb::blocked_range<std::size_t>(0, buffer_size / sizeof(double)), work);
+
+			// Combine values
+			*total_values += total_values_comb.combine(std::plus<>());
 		}
 		// Otherwise, rest processing types...
 		else
@@ -573,8 +580,7 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 	// Assign new state
 	_state = state;
 	_processing_type = processing_type;
-	// TODO: tbb::global_control c(tbb::global_control::max_allowed_parallelism, 1);
-
+	
 	// Open file
 	std::ifstream file(filePath, std::ios::binary);
 	if (file.is_open())
@@ -615,7 +621,7 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 		std::cout << "Data sucessfully analyzed!" << std::endl << std::endl;
 		(*_state).analyzing_done = true;
 		if ((*_state).terminate_process_requested) return;
-
+		
 		// If the data is NOT sequence of the same single number...
 		if (bucket_lower_val != bucket_upper_val)
 		{
