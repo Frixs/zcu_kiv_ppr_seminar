@@ -573,6 +573,95 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 
 #pragma endregion
 
+#pragma region 4. Find Result
+
+/// <summary>
+/// Processing logic for each value that processed in _find_result()
+/// </summary>
+void _find_result_job(double* buffer, size_t i, double percentil_value,
+	size_t* first_occurance_index, size_t* last_occurance_index)
+{
+	const std::lock_guard<std::mutex> lock(_i_mutex);
+
+	double v = buffer[i];
+	//std::cout << "-> " << v << std::endl;
+
+	if (utils::is_double_valid(v) && v == percentil_value)
+	{
+		if (*first_occurance_index == NAN)
+			*first_occurance_index = i;
+		*last_occurance_index = i;
+	}
+}
+
+/// <summary>
+/// 4. part of the algorithm - find result values in the data file.
+/// </summary>
+void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
+	size_t* first_occurance_index, size_t* last_occurance_index)
+{
+	size_t fi; // data file iterator
+	size_t fi_fsize_remaining; // data file iterator counter based on remaining file size to read
+	std::streamoff fi_seekfrom = 0;
+
+	char* buffer = nullptr;
+	size_t buffer_size = 0;
+
+	// Iterate over the segments
+	// ... to preserve the memory limit
+	fi_fsize_remaining = *fsize;
+	for (fi = 0; fi_fsize_remaining > 0; ++fi)
+	{
+		if ((*_state).terminate_process_requested) return;
+		(*_state).result_search_task = fi;
+
+		// Set seek position
+		fi_seekfrom = constants::SEGMENT_PICK_MEMORY_LIMIT * fi;
+		// Set buffer
+		_fi_set_buffer(&buffer, &buffer_size, &fi_fsize_remaining, constants::SEGMENT_PICK_MEMORY_LIMIT);
+		// Read data into buffer
+		(*file).seekg(fi_seekfrom, std::ios::beg);
+		(*file).read(buffer, buffer_size);
+
+		// If multithread processing...
+		if (*_processing_type == worker::ProcessingType::MultiThread)
+		{
+			// Parallel work (job)
+			auto work = [&](tbb::blocked_range<size_t> it)
+			{
+				for (size_t i = it.begin(); i < it.end(); ++i)
+				{
+					if ((*_state).terminate_process_requested) return;
+
+					// Do the job
+					_find_result_job((double*)buffer, i, percentil_value, first_occurance_index, last_occurance_index);
+				}
+			};
+
+			// Process buffer chunks in parallel
+			tbb::parallel_for(tbb::blocked_range<std::size_t>(0, buffer_size / sizeof(double)), work);
+		}
+		// Otherwise, rest processing types...
+		else
+		{
+			// Iterate over the segments
+			// ... to preserve the memory limit
+			for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
+			{
+				if ((*_state).terminate_process_requested) return;
+
+				// Do the job
+				_find_result_job((double*)buffer, i, percentil_value, first_occurance_index, last_occurance_index);
+			}
+		}
+	}
+
+	// Free the last buffer once done
+	_try_free_buffer(&buffer);
+}
+
+#pragma endregion
+
 #pragma region Process Functions
 
 void worker::run(worker::State* state, std::string filePath, int percentil, worker::ProcessingType* processing_type)
@@ -672,11 +761,22 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 		}
 
 		if ((*_state).terminate_process_requested) return;
+
 		std::cout << "Percentil value = " << percentil_value << std::endl << std::endl;
 
+		// 4. - Find result
+		size_t first_occurance_index = (size_t)NAN;
+		size_t last_occurance_index = (size_t)NAN;
+		std::cout << "Finding result..." << std::endl;
+		_find_result(&file, &fsize, percentil_value, &first_occurance_index, &last_occurance_index);
+		std::cout << "Result succesfully found!" << std::endl << std::endl;
+
+		std::cout << "Percentil first index = " << first_occurance_index << std::endl;
+		std::cout << "Percentil last index = " << last_occurance_index << std::endl << std::endl;
 
 		// Close the file
 		file.close();
+
 	}
 	else
 	{
