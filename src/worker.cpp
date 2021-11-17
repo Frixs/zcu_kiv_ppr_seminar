@@ -666,6 +666,7 @@ void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
 
 void worker::run(worker::State* state, std::string filePath, int percentil, worker::ProcessingType* processing_type)
 {
+	cl::Platform platform;
 	// Assign new state
 	_state = state;
 	_processing_type = processing_type;

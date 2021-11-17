@@ -11,7 +11,11 @@
 
 #include "tbb/parallel_for.h"
 #include "tbb/combinable.h"
+
+#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
+#pragma comment(lib, "OpenCL.lib") // evade MS Studio 2019 error LNK2019
 #include "CL/cl.h"
+#include "CL/cl.hpp"
 
 namespace worker
 {
@@ -58,7 +62,7 @@ namespace worker
 	};
 
 	/// <summary>
-	/// UNDONE
+	/// Run the worker process
 	/// </summary>
 	void run(State* state, std::string filePath, int percentil, ProcessingType* processing_type);
 }
