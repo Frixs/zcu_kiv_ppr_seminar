@@ -11,6 +11,7 @@
 
 #include "tbb/parallel_for.h"
 #include "tbb/combinable.h"
+#include "CL/cl.h"
 
 namespace worker
 {
