@@ -11,6 +11,9 @@ worker::State* _state;
 /// Processing type of the currently processing worker
 worker::ProcessingType* _processing_type;
 
+/// GPU OpenCL device (NULL if _processing_type is not OpenCL)
+cl::Device* _cl_gpu_device = NULL;
+
 #pragma endregion
 
 #pragma region General Functions
@@ -21,6 +24,29 @@ worker::ProcessingType* _processing_type;
 size_t _rand(size_t max)
 {
 	return rand() % (max + 1); // 0 .. max
+}
+
+/// <summary>
+/// Gets PTR to copy of OpenCL GPU Device
+/// </summary>
+cl::Device* _get_cl_gpu_device()
+{
+	std::vector<cl::Platform> platforms;
+	cl::Platform::get(&platforms);
+
+	if (platforms.size() > 0)
+	{
+		auto platform = platforms.front();
+		std::vector<cl::Device> devices;
+		platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
+
+		if (devices.size() > 0)
+		{
+			return &devices.front();
+		}
+	}
+
+	return NULL;
 }
 
 /// <summary>
@@ -188,7 +214,7 @@ void _process_segment_data_job(double* values, size_t i,
 {
 	double v = values[i];
 	//std::cout << "-> " << v << std::endl;
-	
+
 	if (utils::is_double_valid(v))
 	{
 		// Check the limits
@@ -289,7 +315,7 @@ void _process_segment_data(double* values, size_t n,
 					p, h, l,
 					&lows_local, &highs_local, &equals_local, &lower_pivot_sample, &upper_pivot_sample, &equal_pivot_sample);
 			}
-			
+
 			// Count the job values
 			_process_segment_data_count(lows_local, highs_local, equals_local, lower_pivot_sample, upper_pivot_sample, equal_pivot_sample,
 				lows, highs, equals, pivot_lower_samples, pivot_upper_samples, pivot_equal_samples);
@@ -666,11 +692,12 @@ void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
 
 void worker::run(worker::State* state, std::string filePath, int percentil, worker::ProcessingType* processing_type)
 {
-	cl::Platform platform;
 	// Assign new state
 	_state = state;
 	_processing_type = processing_type;
-	
+	if (*processing_type == worker::ProcessingType::OpenCL)
+		_cl_gpu_device = _get_cl_gpu_device();
+
 	// Open file
 	std::ifstream file(filePath, std::ios::binary);
 	if (file.is_open())
@@ -711,7 +738,7 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 		std::cout << "Data sucessfully analyzed!" << std::endl << std::endl;
 		(*_state).analyzing_done = true;
 		if ((*_state).terminate_process_requested) return;
-		
+
 		// If the data is NOT sequence of the same single number...
 		if (bucket_lower_val != bucket_upper_val)
 		{
@@ -789,7 +816,7 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 
 #pragma endregion
 
-#pragma region State
+#pragma region State Class
 
 worker::State::State()
 {

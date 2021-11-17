@@ -12,22 +12,37 @@
 
 int main()
 {
+	bool ok_to_run = false;
+	
 	std::cout << "Starting...\n\n";
-	
-	// Create new state values
-	auto state = worker::State();
-	worker::ProcessingType processing_type = worker::ProcessingType::MultiThread;
-	
-	// Start watchdog
-	auto watchdog_res = std::async(watchdog::run, &state);
 
-	// Start processing
-	do
+	// Get parameters
+	std::string filePath = "data/data3.bin";
+	int percentil = 35;
+	auto processing_type = worker::ProcessingType::OpenCL;
+
+	ok_to_run = true;
+
+	// Check if everyything is ok to start run...
+	if (ok_to_run)
 	{
-		state.set_defaults();
-		worker::run(&state, "data/data3.bin", 35, &processing_type);
-	} while (state.recovery_requested);
+		// Create new state values
+		auto state = worker::State();
+		
+		// Start watchdog
+		auto watchdog_res = std::async(watchdog::run, &state);
 
+		// Start processing
+		do
+		{
+			state.set_defaults();
+			worker::run(&state, filePath, percentil, &processing_type);
+		} while (state.recovery_requested);
+	}
+	else
+	{
+		// TODO - unable to run message
+	}
 
 
 	//// percentil = 2 (35%)
