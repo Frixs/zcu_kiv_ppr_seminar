@@ -41,9 +41,7 @@ namespace worker
 		bool recovery_requested; // if the process should try to recover (try again)
 
 		bool file_loaded; // if initially file loaded successfully
-
-		size_t analyzing_task; // total tasks done (currently) in the analyzing phase
-		bool analyzing_done; // indication if theanalyzing is done
+		bool total_values_counted; // if initially total (valid) values has been already counted
 
 		size_t bucket_task_sub; // total tasks done (currently) in the currently processed bucket
 		size_t bucket_task; // total tasks done (total searched buckets), currently

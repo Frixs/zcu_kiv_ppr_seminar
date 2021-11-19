@@ -1,6 +1,3 @@
-#include <iostream>
-#include <cstdlib>
-#include<stdio.h>
 #include "utils.h"
 
 bool utils::is_double_valid(double d)
@@ -29,4 +26,44 @@ double utils::select_r_item(std::vector<double> stream, int n)
 	}
 
 	return reservoir;
+}
+
+size_t utils::generate_rand(size_t max)
+{
+	return rand() % (max + 1); // 0 .. max
+}
+
+cl::Device utils::cl_get_gpu_device()
+{
+	std::vector<cl::Platform> platforms;
+	cl::Platform::get(&platforms);
+
+	if (platforms.size() > 0)
+	{
+		auto platform = platforms.front();
+		std::vector<cl::Device> devices;
+		platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
+
+		if (devices.size() > 0)
+			return devices.front();
+	}
+
+	throw std::runtime_error("Error occurred while selecting the OpenCL GPU device.");
+	return cl::Device();
+}
+
+cl::Program utils::cl_create_program(const std::string& src)
+{
+	cl_int error;
+
+	cl::Context context(utils::cl_get_gpu_device());
+	cl::Program program(context, src);
+
+	error = program.build("-cl-std=CL1.2");
+	if (error != CL_BUILD_SUCCESS)
+	{
+		throw std::runtime_error("Error occurred while building the OpenCL program: " + std::to_string(error));
+	}
+
+	return program;
 }

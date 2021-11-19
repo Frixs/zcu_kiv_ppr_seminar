@@ -8,7 +8,7 @@
 #include "watchdog.h"
 
 
-// TODO: check file has some required minimum file size
+// TODO: check file has some required minimum file size - min 8 bits / 1 byte
 
 int main()
 {

@@ -11,43 +11,9 @@ worker::State* _state;
 /// Processing type of the currently processing worker
 worker::ProcessingType* _processing_type;
 
-/// GPU OpenCL device (NULL if _processing_type is not OpenCL)
-cl::Device* _cl_gpu_device = NULL;
-
 #pragma endregion
 
 #pragma region General Functions
-
-/// <summary>
-/// Generate random number from 0 to max.
-/// </summary>
-size_t _rand(size_t max)
-{
-	return rand() % (max + 1); // 0 .. max
-}
-
-/// <summary>
-/// Gets PTR to copy of OpenCL GPU Device
-/// </summary>
-cl::Device* _get_cl_gpu_device()
-{
-	std::vector<cl::Platform> platforms;
-	cl::Platform::get(&platforms);
-
-	if (platforms.size() > 0)
-	{
-		auto platform = platforms.front();
-		std::vector<cl::Device> devices;
-		platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
-
-		if (devices.size() > 0)
-		{
-			return &devices.front();
-		}
-	}
-
-	return NULL;
-}
 
 /// <summary>
 /// Frees buffer, if any.
@@ -92,131 +58,77 @@ void _fi_set_buffer(char** buffer, size_t* buffer_size, size_t* fi_fsize_remaini
 
 #pragma endregion
 
-#pragma region 1. Analyzing Data
+#pragma region 1. Find Bucket Limits
 
 /// <summary>
-/// Processing logic for each value that processed in _analyze_data()
+/// Processing logic for each value that processed in _process_segment_data() specific for OpenCL
 /// </summary>
-void _analyze_data_job(double* buffer, size_t i,
-	size_t* total_values, double* bucket_lower_val, double* bucket_upper_val)
+std::string _process_segment_data_job()
 {
-	double v = buffer[i];
-
-	if (utils::is_double_valid(v))
-	{
-		(*total_values)++;
-
-		// Look for UPPER bucket value
-		if (*bucket_upper_val < +(std::numeric_limits<double>::infinity()))
+	std::string code = R"CLC(
+		__kernel void run(__global double* data, 
+			__global size_t* total_values, __global double* bucket_lower_val, __global double* bucket_upper_val, __global double* test,
+			const double inf_val)
 		{
-			if (v > *bucket_upper_val)
-				*bucket_upper_val = v;
-		}
-		// Otherwise, set it for the first time...
-		else
-			*bucket_upper_val = v;
+			int i = get_global_id(0);
 
-		// Look for LOWER bucket value
-		if (*bucket_lower_val > -(std::numeric_limits<double>::infinity()))
-		{
-			if (v < *bucket_lower_val)
-				*bucket_lower_val = v;
-		}
-		// Otherwise, set it for the first time...
-		else
-			*bucket_lower_val = v;
-	}
-}
+			double v = data[i];
+			test[i] = 2;
 
-/// <summary>
-/// 1. part of the algorithm - analyze data to get necessary data for further processing.
-/// </summary>
-void _analyze_data(std::ifstream* file, size_t* fsize,
-	size_t* total_values, double* bucket_lower_val, double* bucket_upper_val)
-{
-	size_t fi; // data file iterator
-	size_t fi_fsize_remaining; // data file iterator counter based on remaining file size to read
-	std::streamoff fi_seekfrom = 0;
+			ulong value_long = as_ulong(v);
+			const ulong exp = 0x7FF0000000000000;
+			const ulong p_zero = 0x0000000000000000;
+			const ulong n_zero = 0x8000000000000000;
+			bool inf_or_nan = (value_long & exp) == exp;
+			bool sub_or_zero = (~value_long & exp) == exp;
+			bool zero = value_long == p_zero || value_long == n_zero;
+			bool normal = (!inf_or_nan && !sub_or_zero) || zero;
 
-	char* buffer = nullptr;
-	size_t buffer_size = 0;
-
-	fi_fsize_remaining = *fsize;
-	for (fi = 0; fi_fsize_remaining > 0; ++fi)
-	{
-		if ((*_state).terminate_process_requested) return;
-		(*_state).analyzing_task = fi;
-
-		// Set seek position
-		fi_seekfrom = constants::SEGMENT_SEARCH_MEMORY_LIMIT * fi;
-		// Set buffer
-		_fi_set_buffer(&buffer, &buffer_size, &fi_fsize_remaining, constants::SEGMENT_SEARCH_MEMORY_LIMIT);
-		// Read data into buffer
-		(*file).seekg(fi_seekfrom, std::ios::beg);
-		(*file).read(buffer, buffer_size);
-		// Get values from the buffer
-		double* buffer_vals = (double*)buffer;
-
-		// If multithread processing...
-		if (*_processing_type == worker::ProcessingType::MultiThread)
-		{
-			tbb::combinable<size_t> total_values_comb(0);
-
-			// Parallel work (job)
-			auto work = [&](tbb::blocked_range<size_t> it)
+			if (normal)
 			{
-				size_t& total_values_local = total_values_comb.local();
+				(*total_values)++;
 
-				for (size_t i = it.begin(); i < it.end(); ++i)
+				if (*bucket_upper_val < +inf_val)
 				{
-					if ((*_state).terminate_process_requested) return;
-
-					// Do the job
-					_analyze_data_job(buffer_vals, i, &total_values_local, bucket_lower_val, bucket_upper_val);
+					if (v > *bucket_upper_val)
+						*bucket_upper_val = v;
 				}
-			};
+				else
+				{
+					*bucket_upper_val = v;
+				}
 
-			// Process buffer chunks in parallel
-			tbb::parallel_for(tbb::blocked_range<std::size_t>(0, buffer_size / sizeof(double)), work);
-
-			// Combine values
-			*total_values += total_values_comb.combine(std::plus<>());
-		}
-		// Otherwise, rest processing types...
-		else
-		{
-			// Iterate over the segments
-			// ... to preserve the memory limit
-			for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
-			{
-				if ((*_state).terminate_process_requested) return;
-
-				// Do the job
-				_analyze_data_job(buffer_vals, i, total_values, bucket_lower_val, bucket_upper_val);
+				if (*bucket_lower_val > -inf_val)
+				{
+					if (v < *bucket_lower_val)
+						*bucket_lower_val = v;
+				}
+				else
+				{
+					*bucket_lower_val = v;
+				}
 			}
 		}
-
-		// Free the last buffer once done
-		_try_free_buffer(&buffer);
-	}
+	)CLC";
+	return code;
 }
-
-#pragma endregion
-
-#pragma region 2. Find Bucket Limits
 
 /// <summary>
 /// Processing logic for each value that processed in _process_segment_data()
 /// </summary>
 void _process_segment_data_job(double* values, size_t i,
 	double p, double h, double l,
-	size_t* lows_local, size_t* highs_local, size_t* equals_local, double* lower_pivot_sample, double* upper_pivot_sample, double* equal_pivot_sample)
+	size_t* total_values, size_t* lows_local, size_t* highs_local, size_t* equals_local, double* lower_pivot_sample, double* upper_pivot_sample, double* equal_pivot_sample)
 {
 	double v = values[i];
 	//std::cout << "-> " << v << std::endl;
 
 	if (utils::is_double_valid(v))
 	{
+		// Count total (valid) values, if not counted yet...
+		if (!_state->total_values_counted)
+			(*total_values)++;
+
 		// Check the limits
 		if (v >= l && v <= h)
 		{
@@ -226,7 +138,7 @@ void _process_segment_data_job(double* values, size_t i,
 				// If next number to highs (+ increment highs)...
 				if ((*highs_local)++ > 0)
 				{
-					if (i == _rand(i)) // 0 .. i
+					if (i == utils::generate_rand(i)) // 0 .. i
 						*upper_pivot_sample = v;
 				}
 				// Otherwise, first number to highs...
@@ -239,7 +151,7 @@ void _process_segment_data_job(double* values, size_t i,
 				// If next number to lows (+ increment lows)...
 				if ((*lows_local)++ > 0)
 				{
-					if (i == _rand(i)) // 0 .. i
+					if (i == utils::generate_rand(i)) // 0 .. i
 						*lower_pivot_sample = v;
 				}
 				// Otherwise, first number to lows...
@@ -252,7 +164,7 @@ void _process_segment_data_job(double* values, size_t i,
 				// If next number to equals (+ increment equals)...
 				if ((*equals_local)++ > 0)
 				{
-					if (i == _rand(i)) // 0 .. i
+					if (i == utils::generate_rand(i)) // 0 .. i
 						*equal_pivot_sample = v;
 				}
 				// Otherwise, first number to equals...
@@ -291,14 +203,63 @@ void _process_segment_data_count(size_t lows_local, size_t highs_local, size_t e
 /// </summary>
 void _process_segment_data(double* values, size_t n,
 	double p, double h, double l,
-	size_t* lows, size_t* highs, size_t* equals, std::vector<double>* pivot_lower_samples, std::vector<double>* pivot_upper_samples, std::vector<double>* pivot_equal_samples)
+	size_t* total_values, size_t* lows, size_t* highs, size_t* equals, std::vector<double>* pivot_lower_samples, std::vector<double>* pivot_upper_samples, std::vector<double>* pivot_equal_samples)
 {
-	// If multithread processing...
-	if (*_processing_type == worker::ProcessingType::MultiThread)
+	// If OpenCL processing...
+	if (*_processing_type == worker::ProcessingType::OpenCL)
 	{
+		auto program = utils::cl_create_program(_process_segment_data_job());
+		auto context = program.getInfo<CL_PROGRAM_CONTEXT>();
+		auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
+		auto& device = devices.front();
+
+		//cl_int error;
+		//cl::Buffer in_buf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(double) * vec.size(), vec.data(), &error);
+		//cl::Buffer out_buf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(double) * vec.size(), nullptr, &error);
+		//cl::Kernel kernel(program, "run");
+		//error = kernel.setArg(0, in_buf);
+		//error = kernel.setArg(1, out_buf);
+
+		//cl::CommandQueue queue(context, device);
+
+		//error = queue.enqueueFillBuffer(in_buf, 3, sizeof(double) * 10, sizeof(double) * (vec.size() - 10));
+		//error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(vec.size()));
+		//error = queue.enqueueReadBuffer(out_buf, CL_FALSE, 0, sizeof(double) * vec.size(), vec.data());
+
+		/*std::vector<double> test(buffer_size / sizeof(double));
+		cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, buffer_size, buffer_vals, &error);
+		cl::Buffer cl_buf_total_values(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(size_t), total_values, &error);
+		cl::Buffer cl_buf_bucket_lower_val(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(double), bucket_lower_val, &error);
+		cl::Buffer cl_buf_bucket_upper_val(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(double), bucket_upper_val, &error);
+		cl::Buffer cl_buf_test(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, buffer_size, nullptr, &error);
+		cl::Kernel kernel(program, "run");
+		error = kernel.setArg(0, cl_buf_buffer_vals);
+		error = kernel.setArg(1, cl_buf_total_values);
+		error = kernel.setArg(2, cl_buf_bucket_lower_val);
+		error = kernel.setArg(3, cl_buf_bucket_upper_val);
+		error = kernel.setArg(4, cl_buf_test);
+		error = kernel.setArg(5, std::numeric_limits<double>::infinity());
+
+		cl::CommandQueue queue(context, device);
+		error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(buffer_size / sizeof(double)));
+		error = queue.enqueueReadBuffer(cl_buf_total_values, CL_FALSE, 0, sizeof(size_t), total_values);
+		error = queue.enqueueReadBuffer(cl_buf_bucket_lower_val, CL_FALSE, 0, sizeof(double), bucket_lower_val);
+		error = queue.enqueueReadBuffer(cl_buf_bucket_upper_val, CL_FALSE, 0, sizeof(double), bucket_upper_val);
+		error = queue.enqueueReadBuffer(cl_buf_test, CL_FALSE, 0, buffer_size, test.data());
+
+		cl::finish();*/
+
+	}
+	// If multithread processing...
+	else if (*_processing_type == worker::ProcessingType::MultiThread)
+	{
+		tbb::combinable<size_t> total_values_comb(0);
+
 		// Parallel work (job)
 		auto work = [&](tbb::blocked_range<size_t> it)
 		{
+			size_t& total_values_local = total_values_comb.local();
+
 			size_t lows_local = 0;
 			size_t highs_local = 0;
 			size_t equals_local = 0;
@@ -308,12 +269,12 @@ void _process_segment_data(double* values, size_t n,
 
 			for (size_t i = it.begin(); i < it.end(); ++i)
 			{
-				if ((*_state).terminate_process_requested) return;
+				if (_state->terminate_process_requested) return;
 
 				// Do the job
 				_process_segment_data_job(values, i,
 					p, h, l,
-					&lows_local, &highs_local, &equals_local, &lower_pivot_sample, &upper_pivot_sample, &equal_pivot_sample);
+					&total_values_local, &lows_local, &highs_local, &equals_local, &lower_pivot_sample, &upper_pivot_sample, &equal_pivot_sample);
 			}
 
 			// Count the job values
@@ -323,6 +284,9 @@ void _process_segment_data(double* values, size_t n,
 
 		// Process buffer chunks in parallel
 		tbb::parallel_for(tbb::blocked_range<std::size_t>(0, n), work);
+
+		// Combine values
+		*total_values += total_values_comb.combine(std::plus<>());
 	}
 	// Otherwise, rest processing types...
 	else
@@ -336,12 +300,12 @@ void _process_segment_data(double* values, size_t n,
 
 		for (size_t i = 0; i < n; ++i)
 		{
-			if ((*_state).terminate_process_requested) return;
+			if (_state->terminate_process_requested) return;
 
 			// Do the job
 			_process_segment_data_job(values, i,
 				p, h, l,
-				&lows_local, &highs_local, &equals_local, &lower_pivot_sample, &upper_pivot_sample, &equal_pivot_sample);
+				total_values, &lows_local, &highs_local, &equals_local, &lower_pivot_sample, &upper_pivot_sample, &equal_pivot_sample);
 		}
 
 		// Count the job values
@@ -357,10 +321,10 @@ void _process_segment_data(double* values, size_t n,
 }
 
 /// <summary>
-/// 2. part of the algorithm - find limit upper and lower value to specify range for the final bucket that can be read in limited memory.
+/// 1. part of the algorithm - find limit upper and lower value to specify range for the final bucket that can be read in limited memory.
 /// </summary>
-void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values, int percentil,
-	double* bucket_lower_val, double* bucket_upper_val, size_t* bucket_value_offset, size_t* bucket_total_found)
+void _find_bucket_limits(std::ifstream* file, size_t* fsize, int percentil,
+	size_t* total_values, double* bucket_lower_val, double* bucket_upper_val, size_t* bucket_value_offset, size_t* bucket_total_found)
 {
 	size_t fi; // data file iterator
 	size_t fi_fsize_remaining; // data file iterator counter based on remaining file size to read
@@ -381,9 +345,9 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 	// THe main data iteration
 	do
 	{
-		if ((*_state).terminate_process_requested) return;
-		(*_state).bucket_task++;
-		(*_state).bucket_task_sub = 0;
+		if (_state->terminate_process_requested) return;
+		_state->bucket_task++;
+		_state->bucket_task_sub = 0;
 
 		// Reset segment counters
 		fi_seekfrom = 0;
@@ -399,7 +363,7 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 		fi_fsize_remaining = *fsize;
 		for (fi = 0; fi_fsize_remaining > 0; ++fi)
 		{
-			(*_state).bucket_task_sub = fi;
+			_state->bucket_task_sub = fi;
 
 			// Set seek position
 			fi_seekfrom = constants::SEGMENT_SEARCH_MEMORY_LIMIT * fi;
@@ -412,12 +376,15 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 			// Process segment data
 			_process_segment_data((double*)buffer, buffer_size / sizeof(double),
 				bucket_pivot_val, *bucket_upper_val, *bucket_lower_val,
-				&lows, &highs, &equals, &pivot_lower_samples, &pivot_upper_samples, &pivot_equal_samples);
-			if ((*_state).terminate_process_requested) return;
+				total_values, &lows, &highs, &equals, &pivot_lower_samples, &pivot_upper_samples, &pivot_equal_samples);
+			if (_state->terminate_process_requested) return;
 		}
 
 		// Free the last buffer once done
 		_try_free_buffer(&buffer);
+
+		// Let only first round count it
+		_state->total_values_counted = true;
 
 		// Count found values
 		*bucket_total_found = lows + highs + equals;
@@ -426,9 +393,9 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 		if (*bucket_total_found * sizeof(double) > constants::SEGMENT_SEARCH_MEMORY_LIMIT)
 		{
 			// Get pct of upper/lower segment counters
-			float pctp_lower = lows / (total_values / 100.0f);
-			float pctp_upper = highs / (total_values / 100.0f);
-			float pctp_equal = equals / (total_values / 100.0f);
+			float pctp_lower = lows / (*total_values / 100.0f);
+			float pctp_upper = highs / (*total_values / 100.0f);
+			float pctp_equal = equals / (*total_values / 100.0f);
 
 			// Set limits for the next segment calculation...
 			// If UPPER goes...
@@ -479,7 +446,7 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, size_t total_values
 
 #pragma endregion
 
-#pragma region 3. Find Percentil
+#pragma region 2. Find Percentil
 
 /// <summary>
 /// Processing logic for each value that processed in _find_percentil()
@@ -504,7 +471,7 @@ void _find_percentil_job(double* buffer, size_t i,
 }
 
 /// <summary>
-/// 3. part of the algorithm - find percentil value in the data file based on limit upper and lower value.
+/// 2. part of the algorithm - find percentil value in the data file based on limit upper and lower value.
 /// </summary>
 void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, int percentil, double bucket_lower_val, double bucket_upper_val, size_t bucket_value_offset, size_t bucket_total_found,
 	double* percentil_value)
@@ -527,8 +494,8 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 	fi_fsize_remaining = *fsize;
 	for (fi = 0; fi_fsize_remaining > 0; ++fi)
 	{
-		if ((*_state).terminate_process_requested) return;
-		(*_state).percentil_search_task = fi;
+		if (_state->terminate_process_requested) return;
+		_state->percentil_search_task = fi;
 
 		// Set seek position
 		fi_seekfrom = constants::SEGMENT_PICK_MEMORY_LIMIT * fi;
@@ -546,7 +513,7 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 			{
 				for (size_t i = it.begin(); i < it.end(); ++i)
 				{
-					if ((*_state).terminate_process_requested) return;
+					if (_state->terminate_process_requested) return;
 
 					// Do the job
 					_find_percentil_job((double*)buffer, i, &percentil_bucket, &iv, bucket_lower_val, bucket_upper_val);
@@ -563,7 +530,7 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 			// ... to preserve the memory limit
 			for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
 			{
-				if ((*_state).terminate_process_requested) return;
+				if (_state->terminate_process_requested) return;
 
 				// Do the job
 				_find_percentil_job((double*)buffer, i, &percentil_bucket, &iv, bucket_lower_val, bucket_upper_val);
@@ -574,13 +541,13 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 	// Free the last buffer once done
 	_try_free_buffer(&buffer);
 
-	(*_state).percentil_search_done = true;
-	if ((*_state).terminate_process_requested) return;
+	_state->percentil_search_done = true;
+	if (_state->terminate_process_requested) return;
 	// Quick select (sort)
 	auto m = percentil_bucket.begin() + percentil_bucket_idx;
 	std::nth_element(percentil_bucket.begin(), m, percentil_bucket.end());
-	(*_state).waiting_for_percentil_pickup = true;
-	if ((*_state).terminate_process_requested) return;
+	_state->waiting_for_percentil_pickup = true;
+	if (_state->terminate_process_requested) return;
 
 	// DEBUG MESSAGES
 	std::cout << "percentil_pos = " << percentil_pos << std::endl;
@@ -599,7 +566,7 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 
 #pragma endregion
 
-#pragma region 4. Find Result
+#pragma region 3. Find Result
 
 /// <summary>
 /// Processing logic for each value that processed in _find_result()
@@ -621,7 +588,7 @@ void _find_result_job(double* buffer, size_t i, double percentil_value,
 }
 
 /// <summary>
-/// 4. part of the algorithm - find result values in the data file.
+/// 3. part of the algorithm - find result values in the data file.
 /// </summary>
 void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
 	size_t* first_occurance_index, size_t* last_occurance_index)
@@ -638,8 +605,8 @@ void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
 	fi_fsize_remaining = *fsize;
 	for (fi = 0; fi_fsize_remaining > 0; ++fi)
 	{
-		if ((*_state).terminate_process_requested) return;
-		(*_state).result_search_task = fi;
+		if (_state->terminate_process_requested) return;
+		_state->result_search_task = fi;
 
 		// Set seek position
 		fi_seekfrom = constants::SEGMENT_PICK_MEMORY_LIMIT * fi;
@@ -657,7 +624,7 @@ void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
 			{
 				for (size_t i = it.begin(); i < it.end(); ++i)
 				{
-					if ((*_state).terminate_process_requested) return;
+					if (_state->terminate_process_requested) return;
 
 					// Do the job
 					_find_result_job((double*)buffer, i, percentil_value, first_occurance_index, last_occurance_index);
@@ -674,7 +641,7 @@ void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
 			// ... to preserve the memory limit
 			for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
 			{
-				if ((*_state).terminate_process_requested) return;
+				if (_state->terminate_process_requested) return;
 
 				// Do the job
 				_find_result_job((double*)buffer, i, percentil_value, first_occurance_index, last_occurance_index);
@@ -695,16 +662,14 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 	// Assign new state
 	_state = state;
 	_processing_type = processing_type;
-	if (*processing_type == worker::ProcessingType::OpenCL)
-		_cl_gpu_device = _get_cl_gpu_device();
 
 	// Open file
 	std::ifstream file(filePath, std::ios::binary);
 	if (file.is_open())
 	{
-		if ((*_state).terminate_process_requested) return;
-		(*_state).file_loaded = true;
-		(*_state).terminated = false;
+		if (_state->terminate_process_requested) return;
+		_state->file_loaded = true;
+		_state->terminated = false;
 
 		double percentil_value;
 
@@ -732,67 +697,48 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 		// Get starting timepoint
 		auto time_start = std::chrono::high_resolution_clock::now();
 
-		// 1. - First iteration to analyze the data
-		std::cout << "Analyzing data..." << std::endl;
-		_analyze_data(&file, &fsize, &total_values, &bucket_lower_val, &bucket_upper_val);
-		std::cout << "Data sucessfully analyzed!" << std::endl << std::endl;
-		(*_state).analyzing_done = true;
-		if ((*_state).terminate_process_requested) return;
+		// 1. - Find lower/upper limit values
+		std::cout << "Finding lower/upper bucket values according to memory limits..." << std::endl;
+		_find_bucket_limits(&file, &fsize, percentil, &total_values, &bucket_lower_val, &bucket_upper_val, &bucket_value_offset, &bucket_total_found);
+		std::cout << "Lower/Upper values successfully found!" << std::endl << std::endl;
+		_state->bucket_found = true;
+		if (_state->terminate_process_requested) return;
+
+		// Get ending timepoint
+		auto time_stop = std::chrono::high_resolution_clock::now();
+
+		// Get duration. Substart timepoints to 
+		// get durarion. To cast it to proper unit
+		// use duration cast method
+		auto duration = std::chrono::duration_cast<std::chrono::seconds>(time_stop - time_start);
+
+		std::cout << "Time taken to select final bucket: "
+			<< duration.count() << " seconds" << std::endl << std::endl;
 
 		// If the data is NOT sequence of the same single number...
 		if (bucket_lower_val != bucket_upper_val)
 		{
-			// 2. - Find lower/upper limit values
-			std::cout << "Finding lower/upper bucket values according to memory limits..." << std::endl;
-			_find_bucket_limits(&file, &fsize, total_values, percentil, &bucket_lower_val, &bucket_upper_val, &bucket_value_offset, &bucket_total_found);
-			std::cout << "Lower/Upper values successfully found!" << std::endl << std::endl;
-			(*_state).bucket_found = true;
-			if ((*_state).terminate_process_requested) return;
-
-			// Get ending timepoint
-			auto time_stop = std::chrono::high_resolution_clock::now();
-
-			// Get duration. Substart timepoints to 
-			// get durarion. To cast it to proper unit
-			// use duration cast method
-			auto duration = std::chrono::duration_cast<std::chrono::seconds>(time_stop - time_start);
-
-			std::cout << "Time taken to select final bucket: "
-				<< duration.count() << " seconds" << std::endl << std::endl;
-
-			// If the data is NOT sequence of the same single number...
-			if (bucket_lower_val != bucket_upper_val)
-			{
-				// 3. - Get the percentil
-				std::cout << "Selecting percentil value..." << std::endl;
-				_find_percentil(&file, &fsize, total_values, percentil, bucket_lower_val, bucket_upper_val, bucket_value_offset, bucket_total_found, &percentil_value);
-				std::cout << "Percentil value succesfully selected!" << std::endl << std::endl;
-				if ((*_state).terminate_process_requested) return;
-			}
-			// Otherwise, there is only 1 number...
-			else
-			{
-				// ... so any percentil is any number of the sequence
-				percentil_value = bucket_upper_val;
-				(*_state).percentil_search_done = true;
-				(*_state).waiting_for_percentil_pickup = true;
-			}
+			// 2. - Get the percentil
+			std::cout << "Selecting percentil value..." << std::endl;
+			_find_percentil(&file, &fsize, total_values, percentil, bucket_lower_val, bucket_upper_val, bucket_value_offset, bucket_total_found, &percentil_value);
+			std::cout << "Percentil value succesfully selected!" << std::endl << std::endl;
+			if (_state->terminate_process_requested) return;
 		}
 		// Otherwise, there is only 1 number...
 		else
 		{
 			// ... so any percentil is any number of the sequence
 			percentil_value = bucket_upper_val;
-			(*_state).bucket_found = true;
-			(*_state).percentil_search_done = true;
-			(*_state).waiting_for_percentil_pickup = true;
+			_state->percentil_search_done = true;
+			_state->waiting_for_percentil_pickup = true;
+			_state->bucket_found = true;
 		}
 
-		if ((*_state).terminate_process_requested) return;
+		if (_state->terminate_process_requested) return;
 
 		std::cout << "Percentil value = " << percentil_value << std::endl << std::endl;
 
-		// 4. - Find result
+		// 3. - Find result
 		size_t first_occurance_index = (size_t)NAN;
 		size_t last_occurance_index = (size_t)NAN;
 		std::cout << "Finding result..." << std::endl;
@@ -831,9 +777,7 @@ void worker::State::set_defaults()
 	this->recovery_requested = false;
 
 	this->file_loaded = false;
-
-	this->analyzing_task = 0;
-	this->analyzing_done = false;
+	this->total_values_counted = false;
 
 	this->bucket_task_sub = 0;
 	this->bucket_task = 0;

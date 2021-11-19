@@ -17,7 +17,6 @@ struct t_watchdog_state
 {
 	size_t strikes;
 	size_t recovery_tries = 0; // number of recovery tries
-	size_t analyzing_task;
 	size_t bucket_task_sub;
 	size_t bucket_task;
 	size_t percentil_search_task;
@@ -44,22 +43,6 @@ int _test(worker::State* state, t_watchdog_state* watchdog_state)
 	if (!(*state).file_loaded)
 	{
 		return 2;
-	}
-
-	// Analyzing
-	if (!(*state).analyzing_done)
-	{
-		if ((*state).analyzing_task > (*watchdog_state).analyzing_task)
-		{
-			(*watchdog_state).analyzing_task = (*state).analyzing_task;
-			_set_strike(watchdog_state, false);
-		}
-		else
-		{
-			_set_strike(watchdog_state, true);
-		}
-
-		return 1;
 	}
 
 	// Bucketing
@@ -148,7 +131,6 @@ int watchdog::run(worker::State* state)
 					(*state).recovery_requested = true;
 					watchdog_state.recovery_tries++;
 					watchdog_state.strikes = 0;
-					watchdog_state.analyzing_task = 0;
 					watchdog_state.bucket_task_sub = 0;
 					watchdog_state.bucket_task = 0;
 					watchdog_state.percentil_search_task = 0;
