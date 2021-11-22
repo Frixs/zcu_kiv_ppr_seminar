@@ -66,14 +66,18 @@ void _fi_set_buffer(char** buffer, size_t* buffer_size, size_t* fi_fsize_remaini
 std::string _process_segment_data_job()
 {
 	std::string code = R"CLC(
-		__kernel void run(__global double* data, 
-			__global size_t* total_values, __global double* bucket_lower_val, __global double* bucket_upper_val, __global double* test,
-			const double inf_val)
+		unsigned int generate_rand(unsigned int i) // 0 .. i
+		{
+			unsigned int max = -1;
+			return (unsigned int)(i * ((double)i) / ((double)max));
+		}
+
+		__kernel void run(__global double* data, __global double* outs, __global double* lower_pivot_sample, __global double* upper_pivot_sample, __global double* equal_pivot_sample,
+			const unsigned int total_values_counted, const double p, const double h, const double l)
 		{
 			int i = get_global_id(0);
 
 			double v = data[i];
-			test[i] = 2;
 
 			ulong value_long = as_ulong(v);
 			const ulong exp = 0x7FF0000000000000;
@@ -86,26 +90,36 @@ std::string _process_segment_data_job()
 
 			if (normal)
 			{
-				(*total_values)++;
-
-				if (*bucket_upper_val < +inf_val)
+				// Check the limits
+				if (v >= l && v <= h)
 				{
-					if (v > *bucket_upper_val)
-						*bucket_upper_val = v;
-				}
-				else
-				{
-					*bucket_upper_val = v;
-				}
-
-				if (*bucket_lower_val > -inf_val)
-				{
-					if (v < *bucket_lower_val)
-						*bucket_lower_val = v;
-				}
-				else
-				{
-					*bucket_lower_val = v;
+					// Greater than pivot...
+					if (v > p)
+					{
+						outs[i] = 2;
+						*upper_pivot_sample = v;
+						/*
+						if ((*highs_local)++ > 0)
+						{
+							if (i == generate_rand(i)) // 0 .. i
+								*upper_pivot_sample = v;
+						}
+						else
+							*upper_pivot_sample = v;
+						*/
+					}
+					// Lower than pivot...
+					else if (v < p)
+					{
+						outs[i] = 1;
+						*lower_pivot_sample = v;
+					}
+					// Otherwise, equal to pivot...
+					else
+					{
+						outs[i] = 3;
+						*equal_pivot_sample = v;
+					}
 				}
 			}
 		}
@@ -181,8 +195,6 @@ void _process_segment_data_job(double* values, size_t i,
 void _process_segment_data_count(size_t lows_local, size_t highs_local, size_t equals_local, double lower_pivot_sample, double upper_pivot_sample, double equal_pivot_sample,
 	size_t* lows, size_t* highs, size_t* equals, std::vector<double>* pivot_lower_samples, std::vector<double>* pivot_upper_samples, std::vector<double>* pivot_equal_samples)
 {
-	const std::lock_guard<std::mutex> lock(_i_mutex);
-
 	// Select next segment pivot samples
 	if (lows_local > 0)
 		pivot_lower_samples->push_back(lower_pivot_sample);
@@ -213,41 +225,69 @@ void _process_segment_data(double* values, size_t n,
 		auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
 		auto& device = devices.front();
 
-		//cl_int error;
-		//cl::Buffer in_buf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(double) * vec.size(), vec.data(), &error);
-		//cl::Buffer out_buf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(double) * vec.size(), nullptr, &error);
-		//cl::Kernel kernel(program, "run");
-		//error = kernel.setArg(0, in_buf);
-		//error = kernel.setArg(1, out_buf);
+		cl_int error;
+		size_t lows_local = 0;
+		size_t highs_local = 0;
+		size_t equals_local = 0;
+		double lower_pivot_sample = NAN;
+		double upper_pivot_sample = NAN;
+		double equal_pivot_sample = NAN;
 
-		//cl::CommandQueue queue(context, device);
+		cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS, n * sizeof(double), values, &error);
+		cl::Buffer cl_buf_buffer_outs(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, n * sizeof(double), nullptr, &error);
+		cl::Buffer cl_buf_lower_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
+		cl::Buffer cl_buf_upper_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
+		cl::Buffer cl_buf_equal_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
 
-		//error = queue.enqueueFillBuffer(in_buf, 3, sizeof(double) * 10, sizeof(double) * (vec.size() - 10));
-		//error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(vec.size()));
-		//error = queue.enqueueReadBuffer(out_buf, CL_FALSE, 0, sizeof(double) * vec.size(), vec.data());
-
-		/*std::vector<double> test(buffer_size / sizeof(double));
-		cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, buffer_size, buffer_vals, &error);
-		cl::Buffer cl_buf_total_values(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(size_t), total_values, &error);
-		cl::Buffer cl_buf_bucket_lower_val(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(double), bucket_lower_val, &error);
-		cl::Buffer cl_buf_bucket_upper_val(context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(double), bucket_upper_val, &error);
-		cl::Buffer cl_buf_test(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, buffer_size, nullptr, &error);
 		cl::Kernel kernel(program, "run");
 		error = kernel.setArg(0, cl_buf_buffer_vals);
-		error = kernel.setArg(1, cl_buf_total_values);
-		error = kernel.setArg(2, cl_buf_bucket_lower_val);
-		error = kernel.setArg(3, cl_buf_bucket_upper_val);
-		error = kernel.setArg(4, cl_buf_test);
-		error = kernel.setArg(5, std::numeric_limits<double>::infinity());
+		error = kernel.setArg(1, cl_buf_buffer_outs);
+		error = kernel.setArg(2, cl_buf_lower_pivot_sample);
+		error = kernel.setArg(3, cl_buf_upper_pivot_sample);
+		error = kernel.setArg(4, cl_buf_equal_pivot_sample);
+		error = kernel.setArg(5, _state->total_values_counted);
+		error = kernel.setArg(6, p);
+		error = kernel.setArg(7, h);
+		error = kernel.setArg(8, l);
 
 		cl::CommandQueue queue(context, device);
-		error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(buffer_size / sizeof(double)));
-		error = queue.enqueueReadBuffer(cl_buf_total_values, CL_FALSE, 0, sizeof(size_t), total_values);
-		error = queue.enqueueReadBuffer(cl_buf_bucket_lower_val, CL_FALSE, 0, sizeof(double), bucket_lower_val);
-		error = queue.enqueueReadBuffer(cl_buf_bucket_upper_val, CL_FALSE, 0, sizeof(double), bucket_upper_val);
-		error = queue.enqueueReadBuffer(cl_buf_test, CL_FALSE, 0, buffer_size, test.data());
+		error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(n));
 
-		cl::finish();*/
+		error = queue.enqueueReadBuffer(cl_buf_lower_pivot_sample, CL_TRUE, 0, sizeof(double), &lower_pivot_sample);
+		error = queue.enqueueReadBuffer(cl_buf_upper_pivot_sample, CL_TRUE, 0, sizeof(double), &upper_pivot_sample);
+		error = queue.enqueueReadBuffer(cl_buf_equal_pivot_sample, CL_TRUE, 0, sizeof(double), &equal_pivot_sample);
+		error = queue.enqueueReadBuffer(cl_buf_buffer_outs, CL_TRUE, 0, n * sizeof(double), values);
+		cl::finish();
+
+		// Finalize computation
+		for (size_t i = 0; i < n; ++i)
+		{
+			if (values[i] > 0)
+			{
+				// Count total (valid) values, if not counted yet...
+				if (!_state->total_values_counted)
+					(*total_values)++;
+
+				if (values[i] > 2)
+					equals_local++;
+				else if (values[i] > 1)
+					highs_local++;
+				else
+					lows_local++;
+			}
+		}
+
+		// Count the job values
+		_process_segment_data_count(lows_local, highs_local, equals_local, lower_pivot_sample, upper_pivot_sample, equal_pivot_sample,
+			lows, highs, equals, pivot_lower_samples, pivot_upper_samples, pivot_equal_samples);
+
+		/*
+		for (size_t i = 0; i < 5; i++)
+			std::cout << values[i] << std::endl;
+		std::cout << "- " << lower_pivot_sample << std::endl;
+		std::cout << "+ " << upper_pivot_sample << std::endl;
+		std::cout << "= " << equal_pivot_sample << std::endl;
+		*/
 
 	}
 	// If multithread processing...
@@ -278,6 +318,7 @@ void _process_segment_data(double* values, size_t n,
 			}
 
 			// Count the job values
+			const std::lock_guard<std::mutex> lock(_i_mutex);
 			_process_segment_data_count(lows_local, highs_local, equals_local, lower_pivot_sample, upper_pivot_sample, equal_pivot_sample,
 				lows, highs, equals, pivot_lower_samples, pivot_upper_samples, pivot_equal_samples);
 		};
@@ -454,8 +495,6 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, int percentil,
 void _find_percentil_job(double* buffer, size_t i,
 	std::vector<double>* percentil_bucket, size_t* iv, double bucket_lower_val, double bucket_upper_val)
 {
-	const std::lock_guard<std::mutex> lock(_i_mutex);
-
 	double v = buffer[i];
 	//std::cout << "-> " << v << std::endl;
 
@@ -516,6 +555,7 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 					if (_state->terminate_process_requested) return;
 
 					// Do the job
+					const std::lock_guard<std::mutex> lock(_i_mutex);
 					_find_percentil_job((double*)buffer, i, &percentil_bucket, &iv, bucket_lower_val, bucket_upper_val);
 				}
 			};
@@ -574,8 +614,6 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 void _find_result_job(double* buffer, size_t i, double percentil_value,
 	size_t* first_occurance_index, size_t* last_occurance_index)
 {
-	const std::lock_guard<std::mutex> lock(_i_mutex);
-
 	double v = buffer[i];
 	//std::cout << "-> " << v << std::endl;
 
@@ -627,6 +665,7 @@ void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
 					if (_state->terminate_process_requested) return;
 
 					// Do the job
+					const std::lock_guard<std::mutex> lock(_i_mutex);
 					_find_result_job((double*)buffer, i, percentil_value, first_occurance_index, last_occurance_index);
 				}
 			};

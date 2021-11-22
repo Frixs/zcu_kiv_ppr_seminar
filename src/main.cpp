@@ -17,7 +17,7 @@ int main()
 	std::cout << "Starting...\n\n";
 
 	// Get parameters
-	std::string filePath = "data/data3.bin";
+	std::string filePath = "data/data1.bin";
 	int percentil = 35;
 	auto processing_type = worker::ProcessingType::OpenCL;
 
