@@ -56,8 +56,11 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 		// use duration cast method
 		auto duration = std::chrono::duration_cast<std::chrono::seconds>(time_stop - time_start);
 
-		DEBUG_MSG("Time taken to select final bucket: "
+		DEBUG_MSG("Time taken to find final bucket: "
 			<< duration.count() << " seconds" << std::endl << std::endl);
+
+		// Get starting timepoint
+		time_start = std::chrono::high_resolution_clock::now();
 
 		// If valid data
 		if (total_values > 0)
@@ -86,6 +89,15 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 			DEBUG_MSG("PERCENTIL VALUE: " << std::endl);
 			std::cout << std::hexfloat << percentil_value << std::endl << std::endl;
 
+			// Get ending timepoint
+			time_stop = std::chrono::high_resolution_clock::now();
+			duration = std::chrono::duration_cast<std::chrono::seconds>(time_stop - time_start);
+			DEBUG_MSG("Time taken to find percentil: "
+				<< duration.count() << " seconds" << std::endl << std::endl);
+
+			// Get starting timepoint
+			time_start = std::chrono::high_resolution_clock::now();
+
 			// 3. - Find result
 			size_t first_occurance_index = (size_t)NAN;
 			size_t last_occurance_index = (size_t)NAN;
@@ -96,6 +108,12 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 			DEBUG_MSG("RESULT: " << std::endl);
 			std::cout << (first_occurance_index * 8) << std::endl;
 			std::cout << (last_occurance_index * 8) << std::endl;
+
+			// Get ending timepoint
+			time_stop = std::chrono::high_resolution_clock::now();
+			duration = std::chrono::duration_cast<std::chrono::seconds>(time_stop - time_start);
+			DEBUG_MSG("Time taken to find result: "
+				<< duration.count() << " seconds" << std::endl << std::endl);
 		}
 		// Otherwise, invalid data
 		else

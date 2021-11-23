@@ -101,6 +101,8 @@ int _test(worker::values::State* state, t_watchdog_state* watchdog_state)
 		{
 			_set_strike(watchdog_state, true);
 		}
+
+		return 1;
 	}
 
 	return 0;
