@@ -108,7 +108,7 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 
 			DEBUG_MSG("RESULT: " << std::endl);
 			DEBUG_MSG((first_occurance_index * 8) << std::endl);
-			DEBUG_MSG((last_occurance_index * 8) << std::endl);
+			DEBUG_MSG((last_occurance_index * 8) << std::endl << std::endl));
 
 			// Get ending timepoint
 			time_stop = std::chrono::high_resolution_clock::now();

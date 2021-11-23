@@ -379,7 +379,7 @@ void worker::bucket::find(std::ifstream* file, size_t* fsize, int percentil,
 				*bucket_lower_val = bucket_pivot_val;
 				pivot_upper_samples.insert(pivot_upper_samples.end(), pivot_equal_samples.begin(), pivot_equal_samples.end());
 				bucket_pivot_val = utils::select_r_item(pivot_upper_samples, (int)pivot_upper_samples.size());
-				pctp_offset += pctp_lower;
+				pctp_offset += pctp_lower; // do not count equals cuz we count with equals in the computation
 				*bucket_value_offset += lows;
 				DEBUG_MSG("=== UPPER GOES NEXT ==============" << "\n");
 			}
