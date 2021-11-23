@@ -11,16 +11,23 @@
 
 // TODO: check file has some required minimum file size - min 8 bits / 1 byte
 
-int main()
+int main(int argc, char* argv[])
 {
 	bool ok_to_run = false;
 	
 	DEBUG_MSG("Starting...\n\n");
 
 	// Get parameters
-	std::string filePath = "data/test.bin";
+	std::string filePath = "data/data.bin";
 	int percentil = 40;
-	auto processing_type = worker::values::ProcessingType::SingleThread;
+	auto processing_type = worker::values::ProcessingType::MultiThread;
+	if (argc > 1)
+	{
+		filePath = argv[1];
+		percentil = std::stoi(argv[2]);
+		processing_type = argv[3] == "OpenCL" ? worker::values::ProcessingType::OpenCL
+			: (argv[2] == "SMP" ? worker::values::ProcessingType::MultiThread : worker::values::ProcessingType::SingleThread);
+	}
 
 	ok_to_run = true;
 
