@@ -3,7 +3,9 @@
 #include <iterator>
 #include <algorithm>
 #include <future>
+
 #include "mymem.h"
+#include "worker_values.h"
 #include "worker.h"
 #include "watchdog.h"
 
@@ -16,9 +18,9 @@ int main()
 	DEBUG_MSG("Starting...\n\n");
 
 	// Get parameters
-	std::string filePath = "data/data1.bin";
-	int percentil = 100;
-	auto processing_type = worker::ProcessingType::MultiThread;
+	std::string filePath = "data/1GB.bin";
+	int percentil = 75;
+	auto processing_type = worker::values::ProcessingType::MultiThread;
 
 	ok_to_run = true;
 
@@ -26,7 +28,7 @@ int main()
 	if (ok_to_run)
 	{
 		// Create new state values
-		auto state = worker::State();
+		auto state = worker::values::State();
 		
 		// Start watchdog
 		auto watchdog_res = std::async(watchdog::run, &state);

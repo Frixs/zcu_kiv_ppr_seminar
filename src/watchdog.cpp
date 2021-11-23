@@ -37,7 +37,7 @@ void _set_strike(t_watchdog_state* watchdog_state, bool up)
 /// <summary>
 /// The main test function
 /// </summary>
-int _test(worker::State* state, t_watchdog_state* watchdog_state)
+int _test(worker::values::State* state, t_watchdog_state* watchdog_state)
 {
 	// File load
 	if (!(*state).file_loaded)
@@ -109,7 +109,7 @@ int _test(worker::State* state, t_watchdog_state* watchdog_state)
 /// <summary>
 /// Run watchdog
 /// </summary>
-int watchdog::run(worker::State* state)
+int watchdog::run(worker::values::State* state)
 {
 	while (true)
 	{

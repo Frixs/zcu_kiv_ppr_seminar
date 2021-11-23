@@ -4,14 +4,15 @@
 #include <cstdlib>
 #include<stdio.h>
 #include <vector>
+
+#include "mymem.h"
 #include "constants.h"
 
-#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
-#pragma comment(lib, "OpenCL.lib") // evade MS Studio 2019 error LNK2019
-#include "CL/cl.h"
-#include "CL/cl.hpp"
+#include "libs.h"
 
+// Define debug mode
 #define DEBUG
+// Define debug print function
 #ifdef DEBUG
 #define DEBUG_MSG(str) do { std::cout << str; } while( false )
 #else
@@ -20,6 +21,20 @@
 
 namespace utils
 {
+	/// <summary>
+	/// Frees buffer, if any.
+	/// </summary>
+	void fi_try_free_buffer(char** buffer);
+
+	/// <summary>
+	/// Sets buffer based on iterator going through the data file (it frees the memory if the buffer is not nullptr).
+	/// </summary>
+	/// <param name="buffer">The buffer</param>
+	/// <param name="buffer_size">Size of the set buffer.</param>
+	/// <param name="fi_fsize_remaining">Iterator remaining file size to go through based on which is set buffer size.</param>
+	/// <param name="memory_limit">Memory limit.</param>
+	void fi_set_buffer(char** buffer, size_t* buffer_size, size_t* fi_fsize_remaining, unsigned int memory_limit);
+
 	/// <summary>
 	/// Check if double value is valid for processing
 	/// </summary>

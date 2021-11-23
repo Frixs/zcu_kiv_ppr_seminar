@@ -1,5 +1,36 @@
 #include "utils.h"
 
+void utils::fi_try_free_buffer(char** buffer)
+{
+	// Free buffer from previous calculation...
+	if (*buffer != nullptr)
+	{
+		// Free the buffer memory
+		mymem::free(*buffer);
+		*buffer = nullptr;
+	}
+}
+
+void utils::fi_set_buffer(char** buffer, size_t* buffer_size, size_t* fi_fsize_remaining, unsigned int memory_limit)
+{
+	fi_try_free_buffer(buffer);
+
+	// Allocate buffer memory and get buffer size for the corresponding segment
+	if (*fi_fsize_remaining >= memory_limit)
+	{
+		*buffer = (char*)mymem::malloc(memory_limit);
+		*buffer_size = memory_limit;
+		*fi_fsize_remaining -= memory_limit;
+	}
+	// Otherwise, take the rest...
+	else
+	{
+		*buffer = (char*)mymem::malloc((size_t)(*fi_fsize_remaining));
+		*buffer_size = *fi_fsize_remaining;
+		*fi_fsize_remaining = 0;
+	}
+}
+
 bool utils::is_double_valid(double d)
 {
 	int cl = std::fpclassify(d);

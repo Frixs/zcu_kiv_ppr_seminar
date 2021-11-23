@@ -146,20 +146,29 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\find_bucket.cpp" />
+    <ClCompile Include="src\find_percentil.cpp" />
+    <ClCompile Include="src\find_result.cpp" />
     <ClCompile Include="src\worker.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\manager.cpp" />
     <ClCompile Include="src\mymem.cpp" />
     <ClCompile Include="src\utils.cpp" />
     <ClCompile Include="src\watchdog.cpp" />
+    <ClCompile Include="src\worker_values.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\constants.h" />
+    <ClInclude Include="src\find_bucket.h" />
+    <ClInclude Include="src\find_percentil.h" />
+    <ClInclude Include="src\find_result.h" />
+    <ClInclude Include="src\libs.h" />
     <ClInclude Include="src\worker.h" />
     <ClInclude Include="src\manager.h" />
     <ClInclude Include="src\mymem.h" />
     <ClInclude Include="src\utils.h" />
     <ClInclude Include="src\watchdog.h" />
+    <ClInclude Include="src\worker_values.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
