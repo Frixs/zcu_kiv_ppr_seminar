@@ -4,11 +4,19 @@
 #include <cstdlib>
 #include<stdio.h>
 #include <vector>
+#include "constants.h"
 
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #pragma comment(lib, "OpenCL.lib") // evade MS Studio 2019 error LNK2019
 #include "CL/cl.h"
 #include "CL/cl.hpp"
+
+#define DEBUG
+#ifdef DEBUG
+#define DEBUG_MSG(str) do { std::cout << str; } while( false )
+#else
+#define DEBUG_MSG(str) do { } while ( false )
+#endif
 
 namespace utils
 {

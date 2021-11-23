@@ -136,32 +136,32 @@ int watchdog::run(worker::State* state)
 					watchdog_state.percentil_search_task = 0;
 					watchdog_state.result_search_task = 0;
 
-					std::cout << "##################################################" << std::endl;
-					std::cout << "[WATCHDOG] Trying to start the job again..." << std::endl;
-					std::cout << "##################################################" << std::endl;
+					DEBUG_MSG("##################################################" << std::endl);
+					DEBUG_MSG("[WATCHDOG] Trying to start the job again..." << std::endl);
+					DEBUG_MSG("##################################################" << std::endl);
 				}
 				else
 				{
-					std::cout << "##################################################" << std::endl;
-					std::cout << "[WATCHDOG] No more tries, something went wrong..." << std::endl;
-					std::cout << "##################################################" << std::endl;
+					DEBUG_MSG("##################################################" << std::endl);
+					DEBUG_MSG("[WATCHDOG] No more tries, something went wrong..." << std::endl);
+					DEBUG_MSG("##################################################" << std::endl);
 					break;
 				}
 			}
 			// Done
 			else if (res == 0)
 			{
-				std::cout << "##################################################" << std::endl;
-				std::cout << "[WATCHDOG] All OK. Shutting down..." << std::endl;
-				std::cout << "##################################################" << std::endl;
+				DEBUG_MSG("##################################################" << std::endl);
+				DEBUG_MSG("[WATCHDOG] All OK. Shutting down..." << std::endl);
+				DEBUG_MSG("##################################################" << std::endl);
 				break;
 			}
 			// Otherwise, processing ok...
 			else
 			{
-				std::cout << "##################################################" << std::endl;
-				std::cout << "[WATCHDOG] Everything seems to be fine so far..." << std::endl;
-				std::cout << "##################################################" << std::endl;
+				DEBUG_MSG("##################################################" << std::endl);
+				DEBUG_MSG("[WATCHDOG] Everything seems to be fine so far..." << std::endl);
+				DEBUG_MSG("##################################################" << std::endl);
 			}
 		}
 	}

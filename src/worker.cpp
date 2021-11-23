@@ -135,7 +135,7 @@ void _process_segment_data_job(double* values, size_t i,
 	size_t* total_values, size_t* lows_local, size_t* highs_local, size_t* equals_local, double* lower_pivot_sample, double* upper_pivot_sample, double* equal_pivot_sample)
 {
 	double v = values[i];
-	//std::cout << "-> " << v << std::endl;
+	//DEBUG_MSG("-> " << v << std::endl);
 
 	if (utils::is_double_valid(v))
 	{
@@ -344,11 +344,11 @@ void _process_segment_data(double* values, size_t n,
 		_process_segment_data_count(lows_local, highs_local, equals_local, lower_pivot_sample, upper_pivot_sample, equal_pivot_sample,
 			lows, highs, equals, pivot_lower_samples, pivot_upper_samples, pivot_equal_samples);
 
-		std::cout << "* Pivot: " << p << "\n";
-		std::cout << "- Lows: " << *lows << "(+" << lows_local << ")\n";
-		std::cout << "+ Highs: " << *highs << "(+" << highs_local << ")\n";
-		std::cout << "= Equals: " << *equals << "(+" << equals_local << ")\n";
-		std::cout << "==> L+H+E: " << (*lows + *highs + *equals) << "\n";
+		DEBUG_MSG("* Pivot: " << p << "\n");
+		DEBUG_MSG("- Lows: " << *lows << "(+" << lows_local << ")\n");
+		DEBUG_MSG("+ Highs: " << *highs << "(+" << highs_local << ")\n");
+		DEBUG_MSG("= Equals: " << *equals << "(+" << equals_local << ")\n");
+		DEBUG_MSG("==> L+H+E: " << (*lows + *highs + *equals) << "\n");
 	}
 }
 
@@ -438,7 +438,7 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, int percentil,
 				bucket_pivot_val = utils::select_r_item(pivot_upper_samples, (int)pivot_upper_samples.size());
 				pctp_offset += pctp_lower;
 				*bucket_value_offset += lows;
-				std::cout << "=== UPPER GOES NEXT ==========================" << "\n";
+				DEBUG_MSG("=== UPPER GOES NEXT ==========================" << "\n");
 			}
 			// If EQUAL goes...
 			else if (percentil > pctp_lower + pctp_offset)
@@ -453,20 +453,20 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, int percentil,
 				*bucket_upper_val = bucket_pivot_val;
 				pivot_lower_samples.insert(pivot_lower_samples.end(), pivot_equal_samples.begin(), pivot_equal_samples.end());
 				bucket_pivot_val = utils::select_r_item(pivot_lower_samples, (int)pivot_lower_samples.size());
-				std::cout << "=== LOWER GOES NEXT ==========================" << "\n";
+				DEBUG_MSG("=== LOWER GOES NEXT ==========================" << "\n");
 			}
 
-			std::cout << "========== SEGMENT DONE ==========" << "\n";
-			std::cout << "L+H+E = " << (lows + highs + equals) << "\n";
-			std::cout << "pctp_upper: " << pctp_upper << "\n";
-			std::cout << "pctp_lower: " << pctp_lower << "\n";
-			std::cout << "--- new ---" << "\n";
-			std::cout << "bucket_pivot_val:(" << bucket_pivot_val << ")\n";
-			std::cout << "bucket_upper_val: " << *bucket_upper_val << "\n";
-			std::cout << "bucket_lower_val: " << *bucket_lower_val << "\n";
-			std::cout << "bucket_value_offset: " << *bucket_value_offset << "\n";
-			std::cout << "pctp_offset: " << pctp_offset << "\n";
-			std::cout << "==================================" << "\n\n";
+			DEBUG_MSG("========== SEGMENT DONE ==========" << "\n");
+			DEBUG_MSG("L+H+E = " << (lows + highs + equals) << "\n");
+			DEBUG_MSG("pctp_upper: " << pctp_upper << "\n");
+			DEBUG_MSG("pctp_lower: " << pctp_lower << "\n");
+			DEBUG_MSG("--- new ---" << "\n");
+			DEBUG_MSG("bucket_pivot_val:(" << bucket_pivot_val << ")\n");
+			DEBUG_MSG("bucket_upper_val: " << *bucket_upper_val << "\n");
+			DEBUG_MSG("bucket_lower_val: " << *bucket_lower_val << "\n");
+			DEBUG_MSG("bucket_value_offset: " << *bucket_value_offset << "\n");
+			DEBUG_MSG("pctp_offset: " << pctp_offset << "\n");
+			DEBUG_MSG("==================================" << "\n\n");
 
 			// If the buffer ends up in sequence of the same single number above the memory limit...
 			if (*bucket_lower_val == *bucket_upper_val)
@@ -530,7 +530,7 @@ void _find_percentil_job(double* buffer, size_t i,
 	std::vector<double>* percentil_bucket, size_t* iv, double bucket_lower_val, double bucket_upper_val)
 {
 	double v = buffer[i];
-	//std::cout << "-> " << v << std::endl;
+	//DEBUG_MSG("-> " << v << std::endl);
 
 	if (utils::is_double_valid(v))
 	{
@@ -557,7 +557,8 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 	size_t buffer_size = 0;
 
 	size_t percentil_pos = (size_t)round(total_values * (percentil / 100.0f)); // get percentil number position relative to the entire (valid) data sequence
-	size_t percentil_bucket_idx = percentil_pos - bucket_value_offset - 1;
+	size_t percentil_bucket_idx = percentil_pos - bucket_value_offset;
+	if (percentil_bucket_idx > 0) percentil_bucket_idx -= 1;
 
 	std::vector<double> percentil_bucket(bucket_total_found);
 	size_t iv = 0;
@@ -655,21 +656,22 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 	_state->percentil_search_done = true;
 	if (_state->terminate_process_requested) return;
 	// Quick select (sort)
+	if (percentil_bucket.size() == percentil_bucket_idx) percentil_bucket_idx -= 1;
 	auto m = percentil_bucket.begin() + percentil_bucket_idx;
 	std::nth_element(percentil_bucket.begin(), m, percentil_bucket.end());
 	_state->waiting_for_percentil_pickup = true;
 	if (_state->terminate_process_requested) return;
 
 	// DEBUG MESSAGES
-	std::cout << "percentil_pos = " << percentil_pos << std::endl;
-	std::cout << "percentil_bucket_idx = " << percentil_bucket_idx << std::endl;
-	std::cout << "bucket_upper_val = " << bucket_upper_val << std::endl;
-	std::cout << "bucket_lower_val = " << bucket_lower_val << std::endl;
-	/*std::cout << "v= {";
+	DEBUG_MSG("percentil_pos = " << percentil_pos << std::endl);
+	DEBUG_MSG("percentil_bucket_idx = " << percentil_bucket_idx << std::endl);
+	DEBUG_MSG("bucket_upper_val = " << bucket_upper_val << std::endl);
+	DEBUG_MSG("bucket_lower_val = " << bucket_lower_val << std::endl);
+	/*DEBUG_MSG("v= {");
 	for (double i : percentil_bucket)
-		std::cout << i << ", ";
-	std::cout << "}\n";*/
-	std::cout << "PERCENTIL : " << percentil << std::endl;
+		DEBUG_MSG(i << ", ");
+	DEBUG_MSG("}\n";)*/
+	DEBUG_MSG("PERCENTIL : " << percentil << std::endl);
 
 	// Set the value
 	*percentil_value = percentil_bucket[percentil_bucket_idx];
@@ -682,16 +684,19 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 /// <summary>
 /// Processing logic for each value that processed in _find_result()
 /// </summary>
-void _find_result_job(double* buffer, size_t i, double percentil_value,
+void _find_result_job(double* buffer, size_t i, double percentil_value, bool* first_set,
 	size_t* first_occurance_index, size_t* last_occurance_index)
 {
 	double v = buffer[i];
-	//std::cout << "-> " << v << std::endl;
+	//DEBUG_MSG("-> " << v << std::endl);
 
 	if (utils::is_double_valid(v) && v == percentil_value)
 	{
-		if (*first_occurance_index == NAN)
+		if (!*first_set)
+		{
 			*first_occurance_index = i;
+			*first_set = true;
+		}
 		*last_occurance_index = i;
 	}
 }
@@ -725,6 +730,8 @@ void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
 		(*file).seekg(fi_seekfrom, std::ios::beg);
 		(*file).read(buffer, buffer_size);
 
+		bool first_set = false;
+
 		// If multithread processing...
 		if (*_processing_type == worker::ProcessingType::MultiThread || *_processing_type == worker::ProcessingType::OpenCL)
 		{
@@ -737,7 +744,7 @@ void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
 
 					// Do the job
 					const std::lock_guard<std::mutex> lock(_i_mutex);
-					_find_result_job((double*)buffer, i, percentil_value, first_occurance_index, last_occurance_index);
+					_find_result_job((double*)buffer, i, percentil_value, &first_set, first_occurance_index, last_occurance_index);
 				}
 			};
 
@@ -754,7 +761,7 @@ void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
 				if (_state->terminate_process_requested) return;
 
 				// Do the job
-				_find_result_job((double*)buffer, i, percentil_value, first_occurance_index, last_occurance_index);
+				_find_result_job((double*)buffer, i, percentil_value, &first_set, first_occurance_index, last_occurance_index);
 			}
 		}
 	}
@@ -808,9 +815,9 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 		auto time_start = std::chrono::high_resolution_clock::now();
 
 		// 1. - Find lower/upper limit values
-		std::cout << "Finding lower/upper bucket values according to memory limits..." << std::endl;
+		DEBUG_MSG("Finding lower/upper bucket values according to memory limits..." << std::endl);
 		_find_bucket_limits(&file, &fsize, percentil, &total_values, &bucket_lower_val, &bucket_upper_val, &bucket_value_offset, &bucket_total_found);
-		std::cout << "Lower/Upper values successfully found!" << std::endl << std::endl;
+		DEBUG_MSG("Lower/Upper values successfully found!" << std::endl << std::endl);
 		_state->bucket_found = true;
 		if (_state->terminate_process_requested) return;
 
@@ -822,52 +829,60 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 		// use duration cast method
 		auto duration = std::chrono::duration_cast<std::chrono::seconds>(time_stop - time_start);
 
-		std::cout << "Time taken to select final bucket: "
-			<< duration.count() << " seconds" << std::endl << std::endl;
+		DEBUG_MSG("Time taken to select final bucket: "
+			<< duration.count() << " seconds" << std::endl << std::endl);
 
-		// If the data is NOT sequence of the same single number...
-		if (bucket_lower_val != bucket_upper_val)
+		// If valid data
+		if (total_values > 0)
 		{
-			// 2. - Get the percentil
-			std::cout << "Selecting percentil value..." << std::endl;
-			_find_percentil(&file, &fsize, total_values, percentil, bucket_lower_val, bucket_upper_val, bucket_value_offset, bucket_total_found, &percentil_value);
-			std::cout << "Percentil value succesfully selected!" << std::endl << std::endl;
+			// If the data is NOT sequence of the same single number...
+			if (bucket_lower_val != bucket_upper_val)
+			{
+				// 2. - Get the percentil
+				DEBUG_MSG("Selecting percentil value..." << std::endl);
+				_find_percentil(&file, &fsize, total_values, percentil, bucket_lower_val, bucket_upper_val, bucket_value_offset, bucket_total_found, &percentil_value);
+				DEBUG_MSG("Percentil value succesfully selected!" << std::endl << std::endl);
+				if (_state->terminate_process_requested) return;
+			}
+			// Otherwise, there is only 1 number...
+			else
+			{
+				// ... so any percentil is any number of the sequence
+				percentil_value = bucket_upper_val;
+				_state->percentil_search_done = true;
+				_state->waiting_for_percentil_pickup = true;
+				_state->bucket_found = true;
+			}
+
 			if (_state->terminate_process_requested) return;
+
+			std::cout << percentil_value << std::endl;
+
+			// 3. - Find result
+			size_t first_occurance_index = (size_t)NAN;
+			size_t last_occurance_index = (size_t)NAN;
+			DEBUG_MSG("Finding result..." << std::endl);
+			_find_result(&file, &fsize, percentil_value, &first_occurance_index, &last_occurance_index);
+			DEBUG_MSG("Result succesfully found!" << std::endl);
+
+			std::cout << (first_occurance_index * 8) << std::endl;
+			std::cout << (last_occurance_index * 8) << std::endl;
 		}
-		// Otherwise, there is only 1 number...
+		// Otherwise, invalid data
 		else
 		{
-			// ... so any percentil is any number of the sequence
-			percentil_value = bucket_upper_val;
-			_state->percentil_search_done = true;
-			_state->waiting_for_percentil_pickup = true;
-			_state->bucket_found = true;
+			std::cout << "Invalid data!" << std::endl;
 		}
-
-		if (_state->terminate_process_requested) return;
-
-		std::cout << "Percentil value = " << percentil_value << std::endl << std::endl;
-
-		// 3. - Find result
-		size_t first_occurance_index = (size_t)NAN;
-		size_t last_occurance_index = (size_t)NAN;
-		std::cout << "Finding result..." << std::endl;
-		_find_result(&file, &fsize, percentil_value, &first_occurance_index, &last_occurance_index);
-		std::cout << "Result succesfully found!" << std::endl << std::endl;
-
-		std::cout << "Percentil first index = " << (first_occurance_index * 8) << std::endl;
-		std::cout << "Percentil last index = " << (last_occurance_index * 8) << std::endl << std::endl;
-
 		// Close the file
 		file.close();
 
 	}
 	else
 	{
-		std::cout << "Unable to open file";
+		std::cout << "Unable to open file!" << std::endl;
 	}
 
-	mymem::print_counter();
+	//mymem::print_counter();
 }
 
 #pragma endregion

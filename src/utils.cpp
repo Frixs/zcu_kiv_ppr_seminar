@@ -13,7 +13,7 @@ double utils::select_r_item(std::vector<double> stream, int n)
 
 	// Use a different seed value so that we don't get
 	// same result each time we run this program
-	srand(time(NULL));
+	srand((unsigned int)time(NULL));
 
 	// Iterate from the (k+1)th element to nth element
 	for (i = 1; i < n; ++i)

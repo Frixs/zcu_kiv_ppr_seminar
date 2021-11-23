@@ -7,19 +7,18 @@
 #include "worker.h"
 #include "watchdog.h"
 
-
 // TODO: check file has some required minimum file size - min 8 bits / 1 byte
 
 int main()
 {
 	bool ok_to_run = false;
 	
-	std::cout << "Starting...\n\n";
+	DEBUG_MSG("Starting...\n\n");
 
 	// Get parameters
 	std::string filePath = "data/data1.bin";
-	int percentil = 35;
-	auto processing_type = worker::ProcessingType::OpenCL;
+	int percentil = 100;
+	auto processing_type = worker::ProcessingType::MultiThread;
 
 	ok_to_run = true;
 
