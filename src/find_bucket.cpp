@@ -417,4 +417,6 @@ void worker::bucket::find(std::ifstream* file, size_t* fsize, int percentil,
 		}
 
 	} while (*bucket_total_found * sizeof(double) > constants::SEGMENT_SEARCH_MEMORY_LIMIT); // if there is need for the next segment calculations...
+
+	worker::values::get_state()->bucket_found = true;
 }

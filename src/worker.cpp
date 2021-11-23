@@ -45,7 +45,6 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 		DEBUG_MSG("Finding lower/upper bucket values according to memory limits..." << std::endl);
 		worker::bucket::find(&file, &fsize, percentil, &total_values, &bucket_lower_val, &bucket_upper_val, &bucket_value_offset, &bucket_total_found);
 		DEBUG_MSG("Lower/Upper values successfully found!" << std::endl << std::endl);
-		worker::values::get_state()->bucket_found = true;
 		if (worker::values::get_state()->terminate_process_requested) return;
 
 		// Get ending timepoint
@@ -79,15 +78,17 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 			{
 				// ... so any percentil is any number of the sequence
 				percentil_value = bucket_upper_val;
+				worker::values::get_state()->bucket_found = true;
 				worker::values::get_state()->percentil_search_done = true;
 				worker::values::get_state()->waiting_for_percentil_pickup = true;
-				worker::values::get_state()->bucket_found = true;
+				worker::values::get_state()->result_search_done = true;
 			}
 
 			if (worker::values::get_state()->terminate_process_requested) return;
 
 			DEBUG_MSG("PERCENTIL VALUE: " << std::endl);
-			DEBUG_MSG(std::hexfloat << percentil_value << std::endl << std::endl);
+			DEBUG_MSG(std::hexfloat << percentil_value << std::defaultfloat << std::endl);
+			DEBUG_MSG("(" << percentil_value << ")" << std::endl << std::endl);
 
 			// Get ending timepoint
 			time_stop = std::chrono::high_resolution_clock::now();
@@ -115,7 +116,7 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 			DEBUG_MSG("Time taken to find result: "
 				<< duration.count() << " seconds" << std::endl << std::endl);
 
-			std::cout << std::hexfloat << percentil_value;
+			std::cout << std::hexfloat << percentil_value << std::defaultfloat;
 			std::cout << " " << (first_occurance_index * 8);
 			std::cout << " " << (last_occurance_index * 8);
 			std::cout << std::endl;
@@ -124,6 +125,10 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 		else
 		{
 			std::cout << "Invalid data!" << std::endl;
+			worker::values::get_state()->bucket_found = true;
+			worker::values::get_state()->percentil_search_done = true;
+			worker::values::get_state()->waiting_for_percentil_pickup = true;
+			worker::values::get_state()->result_search_done = true;
 		}
 		// Close the file
 		file.close();

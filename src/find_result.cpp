@@ -90,4 +90,6 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 
 	// Free the last buffer once done
 	utils::fi_try_free_buffer(&buffer);
+
+	worker::values::get_state()->result_search_done = true;
 }

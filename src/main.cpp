@@ -20,7 +20,7 @@ int main()
 	// Get parameters
 	std::string filePath = "data/test.bin";
 	int percentil = 40;
-	auto processing_type = worker::values::ProcessingType::MultiThread;
+	auto processing_type = worker::values::ProcessingType::SingleThread;
 
 	ok_to_run = true;
 
