@@ -233,7 +233,7 @@ void _process_segment_data(double* values, size_t n,
 		double upper_pivot_sample = NAN;
 		double equal_pivot_sample = NAN;
 
-		cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS, n * sizeof(double), values, &error);
+		cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, n * sizeof(double), values, &error);
 		cl::Buffer cl_buf_buffer_outs(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, n * sizeof(double), nullptr, &error);
 		cl::Buffer cl_buf_lower_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
 		cl::Buffer cl_buf_upper_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
@@ -280,15 +280,6 @@ void _process_segment_data(double* values, size_t n,
 		// Count the job values
 		_process_segment_data_count(lows_local, highs_local, equals_local, lower_pivot_sample, upper_pivot_sample, equal_pivot_sample,
 			lows, highs, equals, pivot_lower_samples, pivot_upper_samples, pivot_equal_samples);
-
-		/*
-		for (size_t i = 0; i < 5; i++)
-			std::cout << values[i] << std::endl;
-		std::cout << "- " << lower_pivot_sample << std::endl;
-		std::cout << "+ " << upper_pivot_sample << std::endl;
-		std::cout << "= " << equal_pivot_sample << std::endl;
-		*/
-
 	}
 	// If multithread processing...
 	else if (*_processing_type == worker::ProcessingType::MultiThread)
@@ -492,6 +483,49 @@ void _find_bucket_limits(std::ifstream* file, size_t* fsize, int percentil,
 /// <summary>
 /// Processing logic for each value that processed in _find_percentil()
 /// </summary>
+std::string _find_percentil_job()
+{
+	std::string code = R"CLC(
+		__kernel void run(__global double* data, __global double* outs, 
+			const double h, const double l, const double inf_val)
+		{
+			int i = get_global_id(0);
+
+			double v = data[i];
+
+			ulong value_long = as_ulong(v);
+			const ulong exp = 0x7FF0000000000000;
+			const ulong p_zero = 0x0000000000000000;
+			const ulong n_zero = 0x8000000000000000;
+			bool inf_or_nan = (value_long & exp) == exp;
+			bool sub_or_zero = (~value_long & exp) == exp;
+			bool zero = value_long == p_zero || value_long == n_zero;
+			bool normal = (!inf_or_nan && !sub_or_zero) || zero;
+
+			if (normal)
+			{
+				// Check the limits
+				if (v >= l && v <= h)
+				{
+					outs[i] = v;
+				}
+				else
+				{
+					outs[i] = inf_val;
+				}
+			}
+			else
+			{
+				outs[i] = inf_val;
+			}
+		}
+	)CLC";
+	return code;
+}
+
+/// <summary>
+/// Processing logic for each value that processed in _find_percentil()
+/// </summary>
 void _find_percentil_job(double* buffer, size_t i,
 	std::vector<double>* percentil_bucket, size_t* iv, double bucket_lower_val, double bucket_upper_val)
 {
@@ -544,8 +578,45 @@ void _find_percentil(std::ifstream* file, size_t* fsize, size_t total_values, in
 		(*file).seekg(fi_seekfrom, std::ios::beg);
 		(*file).read(buffer, buffer_size);
 
+		// If OpenCL processing...
+		if (*_processing_type == worker::ProcessingType::OpenCL)
+		{
+			auto program = utils::cl_create_program(_find_percentil_job());
+			auto context = program.getInfo<CL_PROGRAM_CONTEXT>();
+			auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
+			auto& device = devices.front();
+
+			cl_int error;
+
+			cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, buffer_size, (double*)buffer, &error);
+			cl::Buffer cl_buf_buffer_outs(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, buffer_size, nullptr, &error);
+
+			cl::Kernel kernel(program, "run");
+			error = kernel.setArg(0, cl_buf_buffer_vals);
+			error = kernel.setArg(1, cl_buf_buffer_outs);
+			error = kernel.setArg(2, bucket_upper_val);
+			error = kernel.setArg(3, bucket_lower_val);
+			error = kernel.setArg(4, std::numeric_limits<double>::infinity());
+
+			cl::CommandQueue queue(context, device);
+			error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(buffer_size / sizeof(double)));
+
+			error = queue.enqueueReadBuffer(cl_buf_buffer_outs, CL_TRUE, 0, buffer_size, (double*)buffer);
+			cl::finish();
+
+			// Finalize computation
+			for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
+			{
+				double v = ((double*)buffer)[i];
+				if (v < std::numeric_limits<double>::infinity())
+				{
+					percentil_bucket[iv] = v;
+					iv++;
+				}
+			}
+		}
 		// If multithread processing...
-		if (*_processing_type == worker::ProcessingType::MultiThread)
+		else if (*_processing_type == worker::ProcessingType::MultiThread)
 		{
 			// Parallel work (job)
 			auto work = [&](tbb::blocked_range<size_t> it)
@@ -655,7 +726,7 @@ void _find_result(std::ifstream* file, size_t* fsize, double percentil_value,
 		(*file).read(buffer, buffer_size);
 
 		// If multithread processing...
-		if (*_processing_type == worker::ProcessingType::MultiThread)
+		if (*_processing_type == worker::ProcessingType::MultiThread || *_processing_type == worker::ProcessingType::OpenCL)
 		{
 			// Parallel work (job)
 			auto work = [&](tbb::blocked_range<size_t> it)
@@ -784,8 +855,8 @@ void worker::run(worker::State* state, std::string filePath, int percentil, work
 		_find_result(&file, &fsize, percentil_value, &first_occurance_index, &last_occurance_index);
 		std::cout << "Result succesfully found!" << std::endl << std::endl;
 
-		std::cout << "Percentil first index = " << first_occurance_index << std::endl;
-		std::cout << "Percentil last index = " << last_occurance_index << std::endl << std::endl;
+		std::cout << "Percentil first index = " << (first_occurance_index * 8) << std::endl;
+		std::cout << "Percentil last index = " << (last_occurance_index * 8) << std::endl << std::endl;
 
 		// Close the file
 		file.close();

@@ -3,6 +3,11 @@
 namespace constants
 {
 	/// <summary>
+	/// Defines debug mode (console output)
+	/// </summary>
+	const unsigned int DEBUG_MODE = true;
+
+	/// <summary>
 	/// Limit algorithm program memory
 	/// </summary>
 	//const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT = 230 * 1024 * 1024; // in bytes (divisible by sizeof(double))
