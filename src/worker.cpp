@@ -87,7 +87,7 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 			if (worker::values::get_state()->terminate_process_requested) return;
 
 			DEBUG_MSG("PERCENTIL VALUE: " << std::endl);
-			std::cout << std::hexfloat << percentil_value << std::endl << std::endl;
+			DEBUG_MSG(std::hexfloat << percentil_value << std::endl << std::endl);
 
 			// Get ending timepoint
 			time_stop = std::chrono::high_resolution_clock::now();
@@ -106,14 +106,19 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 			DEBUG_MSG("Result succesfully found!" << std::endl << std::endl);
 
 			DEBUG_MSG("RESULT: " << std::endl);
-			std::cout << (first_occurance_index * 8) << std::endl;
-			std::cout << (last_occurance_index * 8) << std::endl;
+			DEBUG_MSG((first_occurance_index * 8) << std::endl);
+			DEBUG_MSG((last_occurance_index * 8) << std::endl);
 
 			// Get ending timepoint
 			time_stop = std::chrono::high_resolution_clock::now();
 			duration = std::chrono::duration_cast<std::chrono::seconds>(time_stop - time_start);
 			DEBUG_MSG("Time taken to find result: "
 				<< duration.count() << " seconds" << std::endl << std::endl);
+
+			std::cout << std::hexfloat << percentil_value;
+			std::cout << " " << (first_occurance_index * 8);
+			std::cout << " " << (last_occurance_index * 8);
+			std::cout << std::endl;
 		}
 		// Otherwise, invalid data
 		else
