@@ -80,9 +80,9 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 		worker::values::get_state()->result_search_task = fi;
 
 		// Set seek position
-		fi_seekfrom = constants::SEGMENT_PICK_MEMORY_LIMIT * fi;
+		fi_seekfrom = constants::SEGMENT_SEARCH_MEMORY_LIMIT * fi;
 		// Set buffer
-		utils::fi_set_buffer(&buffer, &buffer_size, &fi_fsize_remaining, constants::SEGMENT_PICK_MEMORY_LIMIT);
+		utils::fi_set_buffer(&buffer, &buffer_size, &fi_fsize_remaining, constants::SEGMENT_SEARCH_MEMORY_LIMIT);
 		// Read data into buffer
 		(*file).seekg(fi_seekfrom, std::ios::beg);
 		(*file).read(buffer, buffer_size);
