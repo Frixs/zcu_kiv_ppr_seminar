@@ -10,7 +10,7 @@ std::mutex _i_percentil_mutex;
 std::string _find_percentil_job()
 {
 	std::string code = R"CLC(
-		__kernel void run(__global double* data, __global double* outs, 
+		__kernel void run(__global double* data, 
 			const double h, const double l, const double inf_val)
 		{
 			int i = get_global_id(0);
@@ -31,16 +31,16 @@ std::string _find_percentil_job()
 				// Check the limits
 				if (v >= l && v <= h)
 				{
-					outs[i] = v;
+					data[i] = v;
 				}
 				else
 				{
-					outs[i] = inf_val;
+					data[i] = inf_val;
 				}
 			}
 			else
 			{
-				outs[i] = inf_val;
+				data[i] = inf_val;
 			}
 		}
 	)CLC";
@@ -112,20 +112,18 @@ void worker::percentil::find(std::ifstream* file, size_t* fsize, size_t total_va
 
 			cl_int error;
 
-			cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, buffer_size, (double*)buffer, &error);
-			cl::Buffer cl_buf_buffer_outs(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, buffer_size, nullptr, &error);
+			cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, buffer_size, (double*)buffer, &error);
 
 			cl::Kernel kernel(program, "run");
 			error = kernel.setArg(0, cl_buf_buffer_vals);
-			error = kernel.setArg(1, cl_buf_buffer_outs);
-			error = kernel.setArg(2, bucket_upper_val);
-			error = kernel.setArg(3, bucket_lower_val);
-			error = kernel.setArg(4, std::numeric_limits<double>::infinity());
+			error = kernel.setArg(1, bucket_upper_val);
+			error = kernel.setArg(2, bucket_lower_val);
+			error = kernel.setArg(3, std::numeric_limits<double>::infinity());
 
 			cl::CommandQueue queue(context, device);
 			error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(buffer_size / sizeof(double)));
 
-			error = queue.enqueueReadBuffer(cl_buf_buffer_outs, CL_TRUE, 0, buffer_size, (double*)buffer);
+			error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, buffer_size, (double*)buffer);
 			cl::finish();
 
 			// Finalize computation

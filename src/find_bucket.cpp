@@ -16,7 +16,7 @@ std::string _process_segment_data_job()
 			return (unsigned int)(i * ((double)i) / ((double)max));
 		}
 
-		__kernel void run(__global double* data, __global double* outs, __global double* lower_pivot_sample, __global double* upper_pivot_sample, __global double* equal_pivot_sample,
+		__kernel void run(__global double* data, __global double* lower_pivot_sample, __global double* upper_pivot_sample, __global double* equal_pivot_sample,
 			const unsigned int total_values_counted, const double p, const double h, const double l)
 		{
 			int i = get_global_id(0);
@@ -34,14 +34,16 @@ std::string _process_segment_data_job()
 
 			if (normal)
 			{
+				data[i] = 1;
+
 				// Check the limits
 				if (v >= l && v <= h)
 				{
 					// Greater than pivot...
 					if (v > p)
 					{
-						outs[i] = 2;
 						*upper_pivot_sample = v;
+						data[i] = 3;
 						/*
 						if ((*highs_local)++ > 0)
 						{
@@ -55,14 +57,14 @@ std::string _process_segment_data_job()
 					// Lower than pivot...
 					else if (v < p)
 					{
-						outs[i] = 1;
 						*lower_pivot_sample = v;
+						data[i] = 2;
 					}
 					// Otherwise, equal to pivot...
 					else
 					{
-						outs[i] = 3;
 						*equal_pivot_sample = v;
+						data[i] = 4;
 					}
 				}
 			}
@@ -177,30 +179,28 @@ void _process_segment_data(double* values, size_t n,
 		double upper_pivot_sample = NAN;
 		double equal_pivot_sample = NAN;
 
-		cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, n * sizeof(double), values, &error);
-		cl::Buffer cl_buf_buffer_outs(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, n * sizeof(double), nullptr, &error);
+		cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, n * sizeof(double), values, &error);
 		cl::Buffer cl_buf_lower_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
 		cl::Buffer cl_buf_upper_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
 		cl::Buffer cl_buf_equal_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
 
 		cl::Kernel kernel(program, "run");
 		error = kernel.setArg(0, cl_buf_buffer_vals);
-		error = kernel.setArg(1, cl_buf_buffer_outs);
-		error = kernel.setArg(2, cl_buf_lower_pivot_sample);
-		error = kernel.setArg(3, cl_buf_upper_pivot_sample);
-		error = kernel.setArg(4, cl_buf_equal_pivot_sample);
-		error = kernel.setArg(5, worker::values::get_state()->total_values_counted);
-		error = kernel.setArg(6, p);
-		error = kernel.setArg(7, h);
-		error = kernel.setArg(8, l);
+		error = kernel.setArg(1, cl_buf_lower_pivot_sample);
+		error = kernel.setArg(2, cl_buf_upper_pivot_sample);
+		error = kernel.setArg(3, cl_buf_equal_pivot_sample);
+		error = kernel.setArg(4, worker::values::get_state()->total_values_counted);
+		error = kernel.setArg(5, p);
+		error = kernel.setArg(6, h);
+		error = kernel.setArg(7, l);
 
 		cl::CommandQueue queue(context, device);
 		error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(n));
 
+		error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, n * sizeof(double), values);
 		error = queue.enqueueReadBuffer(cl_buf_lower_pivot_sample, CL_TRUE, 0, sizeof(double), &lower_pivot_sample);
 		error = queue.enqueueReadBuffer(cl_buf_upper_pivot_sample, CL_TRUE, 0, sizeof(double), &upper_pivot_sample);
 		error = queue.enqueueReadBuffer(cl_buf_equal_pivot_sample, CL_TRUE, 0, sizeof(double), &equal_pivot_sample);
-		error = queue.enqueueReadBuffer(cl_buf_buffer_outs, CL_TRUE, 0, n * sizeof(double), values);
 		cl::finish();
 
 		tbb::combinable<size_t> total_values_comb(0);
@@ -213,7 +213,7 @@ void _process_segment_data(double* values, size_t n,
 			size_t lows_local = 0;
 			size_t highs_local = 0;
 			size_t equals_local = 0;
-			
+
 			for (size_t i = it.begin(); i < it.end(); ++i)
 			{
 				if (worker::values::get_state()->terminate_process_requested) return;
@@ -224,17 +224,17 @@ void _process_segment_data(double* values, size_t n,
 					if (!worker::values::get_state()->total_values_counted)
 						total_values_local++;
 
-					if (values[i] > 2)
+					if (values[i] > 3)
 					{
 						equals_local++;
 						equals_any = true;
 					}
-					else if (values[i] > 1)
+					else if (values[i] > 2)
 					{
 						highs_local++;
 						highs_any = true;
 					}
-					else
+					else if (values[i] > 1)
 					{
 						lows_local++;
 						lows_any = true;
@@ -253,7 +253,8 @@ void _process_segment_data(double* values, size_t n,
 		tbb::parallel_for(tbb::blocked_range<std::size_t>(0, n), work);
 
 		// Combine values
-		*total_values += total_values_comb.combine(std::plus<>());
+		if (!worker::values::get_state()->total_values_counted)
+			*total_values += total_values_comb.combine(std::plus<>());
 
 		if (lows_any)
 			pivot_lower_samples->push_back(lower_pivot_sample);
@@ -299,7 +300,8 @@ void _process_segment_data(double* values, size_t n,
 		tbb::parallel_for(tbb::blocked_range<std::size_t>(0, n), work);
 
 		// Combine values
-		*total_values += total_values_comb.combine(std::plus<>());
+		if (!worker::values::get_state()->total_values_counted)
+			*total_values += total_values_comb.combine(std::plus<>());
 	}
 	// Otherwise, rest processing types...
 	else
@@ -341,6 +343,8 @@ void worker::bucket::find(std::ifstream* file, size_t* fsize, int percentil,
 	size_t fi; // data file iterator
 	size_t fi_fsize_remaining; // data file iterator counter based on remaining file size to read
 	std::streamoff fi_seekfrom = 0;
+	const unsigned int memory_limit = *worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL
+		? constants::SEGMENT_SEARCH_MEMORY_LIMIT_CL : constants::SEGMENT_SEARCH_MEMORY_LIMIT;
 
 	char* buffer = nullptr;
 	size_t buffer_size = 0;
@@ -378,9 +382,9 @@ void worker::bucket::find(std::ifstream* file, size_t* fsize, int percentil,
 			worker::values::get_state()->bucket_task_sub = fi;
 
 			// Set seek position
-			fi_seekfrom = constants::SEGMENT_SEARCH_MEMORY_LIMIT * fi;
+			fi_seekfrom = memory_limit * fi;
 			// Set buffer
-			utils::fi_set_buffer(&buffer, &buffer_size, &fi_fsize_remaining, constants::SEGMENT_SEARCH_MEMORY_LIMIT);
+			utils::fi_set_buffer(&buffer, &buffer_size, &fi_fsize_remaining, memory_limit);
 			// Read data into buffer
 			(*file).seekg(fi_seekfrom, std::ios::beg);
 			(*file).read(buffer, buffer_size);
@@ -402,7 +406,7 @@ void worker::bucket::find(std::ifstream* file, size_t* fsize, int percentil,
 		*bucket_total_found = lows + highs + equals;
 
 		// If there is need for the next segment calculations...
-		if (*bucket_total_found * sizeof(double) > constants::SEGMENT_SEARCH_MEMORY_LIMIT)
+		if (*bucket_total_found * sizeof(double) > memory_limit)
 		{
 			// Get pct of upper/lower segment counters
 			float pctp_lower = lows / (*total_values / 100.0f);
@@ -453,7 +457,7 @@ void worker::bucket::find(std::ifstream* file, size_t* fsize, int percentil,
 				break;
 		}
 
-	} while (*bucket_total_found * sizeof(double) > constants::SEGMENT_SEARCH_MEMORY_LIMIT); // if there is need for the next segment calculations...
+	} while (*bucket_total_found * sizeof(double) > memory_limit); // if there is need for the next segment calculations...
 
 	worker::values::get_state()->bucket_found = true;
 }

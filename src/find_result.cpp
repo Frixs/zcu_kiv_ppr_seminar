@@ -10,7 +10,7 @@ std::mutex _i_result_mutex;
 std::string _find_result_job()
 {
 	std::string code = R"CLC(
-		__kernel void run(__global double* data, __global double* outs, 
+		__kernel void run(__global double* data, 
 			const double percentil_value)
 		{
 			int i = get_global_id(0);
@@ -28,11 +28,11 @@ std::string _find_result_job()
 
 			if (normal && v == percentil_value)
 			{
-				outs[i] = i;
+				data[i] = i;
 			}
 			else
 			{
-				outs[i] = -1;
+				data[i] = -1;
 			}
 		}
 	)CLC";
@@ -67,6 +67,8 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 	size_t fi; // data file iterator
 	size_t fi_fsize_remaining; // data file iterator counter based on remaining file size to read
 	std::streamoff fi_seekfrom = 0;
+	const unsigned int memory_limit = *worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL
+		? constants::SEGMENT_SEARCH_MEMORY_LIMIT_CL : constants::SEGMENT_SEARCH_MEMORY_LIMIT;
 
 	char* buffer = nullptr;
 	size_t buffer_size = 0;
@@ -80,9 +82,9 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 		worker::values::get_state()->result_search_task = fi;
 
 		// Set seek position
-		fi_seekfrom = constants::SEGMENT_SEARCH_MEMORY_LIMIT * fi;
+		fi_seekfrom = memory_limit * fi;
 		// Set buffer
-		utils::fi_set_buffer(&buffer, &buffer_size, &fi_fsize_remaining, constants::SEGMENT_SEARCH_MEMORY_LIMIT);
+		utils::fi_set_buffer(&buffer, &buffer_size, &fi_fsize_remaining, memory_limit);
 		// Read data into buffer
 		(*file).seekg(fi_seekfrom, std::ios::beg);
 		(*file).read(buffer, buffer_size);
@@ -99,18 +101,16 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 
 			cl_int error;
 
-			cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, buffer_size, (double*)buffer, &error);
-			cl::Buffer cl_buf_buffer_outs(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, buffer_size, nullptr, &error);
+			cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, buffer_size, (double*)buffer, &error);
 
 			cl::Kernel kernel(program, "run");
 			error = kernel.setArg(0, cl_buf_buffer_vals);
-			error = kernel.setArg(1, cl_buf_buffer_outs);
-			error = kernel.setArg(2, percentil_value);
+			error = kernel.setArg(1, percentil_value);
 
 			cl::CommandQueue queue(context, device);
 			error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(buffer_size / sizeof(double)));
 
-			error = queue.enqueueReadBuffer(cl_buf_buffer_outs, CL_TRUE, 0, buffer_size, (double*)buffer);
+			error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, buffer_size, (double*)buffer);
 			cl::finish();
 
 			// Parallel work (job)

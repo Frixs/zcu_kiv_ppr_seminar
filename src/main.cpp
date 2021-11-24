@@ -5,6 +5,7 @@
 #include <future>
 
 #include "mymem.h"
+#include "constants.h"
 #include "worker_values.h"
 #include "worker.h"
 #include "watchdog.h"
@@ -14,7 +15,7 @@
 int main(int argc, char* argv[])
 {
 	bool ok_to_run = false;
-	
+
 	DEBUG_MSG("Starting...\n\n");
 
 	// Get parameters
@@ -36,7 +37,7 @@ int main(int argc, char* argv[])
 	{
 		// Create new state values
 		auto state = worker::values::State();
-		
+
 		// Start watchdog
 		auto watchdog_res = std::async(watchdog::run, &state);
 
