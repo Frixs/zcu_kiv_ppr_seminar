@@ -170,9 +170,9 @@ void _process_segment_data(double* values, size_t n,
 		auto& device = devices.front();
 
 		cl_int error;
-		size_t lows_local = 0;
-		size_t highs_local = 0;
-		size_t equals_local = 0;
+		bool lows_any = false;
+		bool highs_any = false;
+		bool equals_any = false;
 		double lower_pivot_sample = NAN;
 		double upper_pivot_sample = NAN;
 		double equal_pivot_sample = NAN;
@@ -203,27 +203,64 @@ void _process_segment_data(double* values, size_t n,
 		error = queue.enqueueReadBuffer(cl_buf_buffer_outs, CL_TRUE, 0, n * sizeof(double), values);
 		cl::finish();
 
-		// Finalize computation
-		for (size_t i = 0; i < n; ++i)
+		tbb::combinable<size_t> total_values_comb(0);
+
+		// Parallel work (job)
+		auto work = [&](tbb::blocked_range<size_t> it)
 		{
-			if (values[i] > 0)
+			size_t& total_values_local = total_values_comb.local();
+
+			size_t lows_local = 0;
+			size_t highs_local = 0;
+			size_t equals_local = 0;
+			
+			for (size_t i = it.begin(); i < it.end(); ++i)
 			{
-				// Count total (valid) values, if not counted yet...
-				if (!worker::values::get_state()->total_values_counted)
-					(*total_values)++;
+				if (worker::values::get_state()->terminate_process_requested) return;
 
-				if (values[i] > 2)
-					equals_local++;
-				else if (values[i] > 1)
-					highs_local++;
-				else
-					lows_local++;
+				if (values[i] > 0)
+				{
+					// Count total (valid) values, if not counted yet...
+					if (!worker::values::get_state()->total_values_counted)
+						total_values_local++;
+
+					if (values[i] > 2)
+					{
+						equals_local++;
+						equals_any = true;
+					}
+					else if (values[i] > 1)
+					{
+						highs_local++;
+						highs_any = true;
+					}
+					else
+					{
+						lows_local++;
+						lows_any = true;
+					}
+				}
 			}
-		}
 
-		// Count the job values
-		_process_segment_data_count(lows_local, highs_local, equals_local, lower_pivot_sample, upper_pivot_sample, equal_pivot_sample,
-			lows, highs, equals, pivot_lower_samples, pivot_upper_samples, pivot_equal_samples);
+			// Count the job values
+			const std::lock_guard<std::mutex> lock(_i_bucket_mutex);
+			*lows += lows_local;
+			*highs += highs_local;
+			*equals += equals_local;
+		};
+
+		// Process buffer chunks in parallel
+		tbb::parallel_for(tbb::blocked_range<std::size_t>(0, n), work);
+
+		// Combine values
+		*total_values += total_values_comb.combine(std::plus<>());
+
+		if (lows_any)
+			pivot_lower_samples->push_back(lower_pivot_sample);
+		if (highs_any)
+			pivot_upper_samples->push_back(upper_pivot_sample);
+		if (equals_any)
+			pivot_equal_samples->push_back(equal_pivot_sample);
 	}
 	// If multithread processing...
 	else if (*worker::values::get_processing_type() == worker::values::ProcessingType::MultiThread)

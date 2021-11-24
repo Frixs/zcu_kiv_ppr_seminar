@@ -5,7 +5,7 @@ std::mutex _i_percentil_mutex;
 #pragma region Private Functions
 
 /// <summary>
-/// Processing logic for each value that processed in find()
+/// Processing logic for each value that processed in find() specific for OpenCL
 /// </summary>
 std::string _find_percentil_job()
 {

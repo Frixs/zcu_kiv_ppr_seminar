@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
 	// Get parameters
 	std::string filePath = "data/data.bin";
 	int percentil = 40;
-	auto processing_type = worker::values::ProcessingType::MultiThread;
+	auto processing_type = worker::values::ProcessingType::OpenCL;
 	if (argc > 1)
 	{
 		filePath = argv[1];
