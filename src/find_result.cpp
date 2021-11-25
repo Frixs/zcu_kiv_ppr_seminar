@@ -95,8 +95,6 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 		size_t first_occurance_index_local = 0;
 		size_t last_occurance_index_local = 0;
 
-		total_buckets_index += buffer_size / sizeof(double);
-
 		// If OpenCL processing...
 		if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL)
 		{
@@ -144,8 +142,10 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 			// Process buffer chunks in parallel
 			tbb::parallel_for(tbb::blocked_range<std::size_t>(0, buffer_size / sizeof(double)), work);
 
-			*first_occurance_index = first_occurance_index_local > 0 ? first_occurance_index_local + total_buckets_index : 0;
-			*last_occurance_index = last_occurance_index_local > 0 ? last_occurance_index_local + total_buckets_index : 0;
+			if (first_occurance_index_local > 0)
+				*first_occurance_index = first_occurance_index_local + total_buckets_index;
+			if (last_occurance_index_local > 0)
+				*last_occurance_index = last_occurance_index_local + total_buckets_index;
 		}
 		// If multithread processing...
 		else if (*worker::values::get_processing_type() == worker::values::ProcessingType::MultiThread)
@@ -166,8 +166,10 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 			// Process buffer chunks in parallel
 			tbb::parallel_for(tbb::blocked_range<std::size_t>(0, buffer_size / sizeof(double)), work);
 
-			*first_occurance_index = first_occurance_index_local > 0 ? first_occurance_index_local + total_buckets_index : 0;
-			*last_occurance_index = last_occurance_index_local > 0 ? last_occurance_index_local + total_buckets_index : 0;
+			if (first_occurance_index_local > 0)
+				*first_occurance_index = first_occurance_index_local + total_buckets_index;
+			if (last_occurance_index_local > 0)
+				*last_occurance_index = last_occurance_index_local + total_buckets_index;
 		}
 		// Otherwise, rest processing types...
 		else
@@ -182,9 +184,14 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 				_find_result_job((double*)buffer, i, percentil_value, &first_set, &first_occurance_index_local, &last_occurance_index_local);
 			}
 
-			*first_occurance_index = first_occurance_index_local > 0 ? first_occurance_index_local + total_buckets_index : 0;
-			*last_occurance_index = last_occurance_index_local > 0 ? last_occurance_index_local + total_buckets_index : 0;
+			if (first_occurance_index_local > 0)
+				*first_occurance_index = first_occurance_index_local + total_buckets_index;
+			if (last_occurance_index_local > 0)
+				*last_occurance_index = last_occurance_index_local + total_buckets_index;
 		}
+
+		// Increment already processed item count
+		total_buckets_index += buffer_size / sizeof(double);
 	}
 
 	// Indexing starts at 0, take care of it
