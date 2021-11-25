@@ -68,6 +68,10 @@ std::string _process_segment_data_job()
 					}
 				}
 			}
+			else
+			{
+				data[i] = 0;
+			}
 		}
 	)CLC";
 	return code;
