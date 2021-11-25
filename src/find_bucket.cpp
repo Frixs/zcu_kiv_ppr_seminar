@@ -10,13 +10,16 @@ std::mutex _i_bucket_mutex;
 std::string _process_segment_data_job()
 {
 	std::string code = R"CLC(
+		/*
 		unsigned int generate_rand(unsigned int i) // 0 .. i
 		{
 			unsigned int max = -1;
 			return (unsigned int)(i * ((double)i) / ((double)max));
 		}
+		*/
 
-		__kernel void run(__global double* data, __global double* lower_pivot_sample, __global double* upper_pivot_sample, __global double* equal_pivot_sample,
+		__kernel void run(__global double* data, __global double* lower_pivot_sample, __global double* upper_pivot_sample, __global double* equal_pivot_sample, 
+			__global double* total_values_local, __global double* lows_local,__global double* highs_local, __global double* equals_local,
 			const unsigned int total_values_counted, const double p, const double h, const double l)
 		{
 			int i = get_global_id(0);
@@ -34,7 +37,8 @@ std::string _process_segment_data_job()
 
 			if (normal)
 			{
-				data[i] = 1;
+				if (!total_values_counted)
+					atomic_add(total_values_local, 1);
 
 				// Check the limits
 				if (v >= l && v <= h)
@@ -43,34 +47,21 @@ std::string _process_segment_data_job()
 					if (v > p)
 					{
 						*upper_pivot_sample = v;
-						data[i] = 3;
-						/*
-						if ((*highs_local)++ > 0)
-						{
-							if (i == generate_rand(i)) // 0 .. i
-								*upper_pivot_sample = v;
-						}
-						else
-							*upper_pivot_sample = v;
-						*/
+						atomic_add(highs_local, 1);
 					}
 					// Lower than pivot...
 					else if (v < p)
 					{
 						*lower_pivot_sample = v;
-						data[i] = 2;
+						atomic_add(lows_local, 1);
 					}
 					// Otherwise, equal to pivot...
 					else
 					{
 						*equal_pivot_sample = v;
-						data[i] = 4;
+						atomic_add(equals_local, 1);
 					}
 				}
-			}
-			else
-			{
-				data[i] = 0;
 			}
 		}
 	)CLC";
@@ -176,9 +167,10 @@ void _process_segment_data(double* values, size_t n,
 		auto& device = devices.front();
 
 		cl_int error;
-		bool lows_any = false;
-		bool highs_any = false;
-		bool equals_any = false;
+		size_t total_values_local = 0;
+		size_t lows_local = 0;
+		size_t highs_local = 0;
+		size_t equals_local = 0;
 		double lower_pivot_sample = NAN;
 		double upper_pivot_sample = NAN;
 		double equal_pivot_sample = NAN;
@@ -187,16 +179,24 @@ void _process_segment_data(double* values, size_t n,
 		cl::Buffer cl_buf_lower_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
 		cl::Buffer cl_buf_upper_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
 		cl::Buffer cl_buf_equal_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
+		cl::Buffer cl_buf_total_values_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
+		cl::Buffer cl_buf_lows_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
+		cl::Buffer cl_buf_highs_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
+		cl::Buffer cl_buf_equals_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
 
 		cl::Kernel kernel(program, "run");
 		error = kernel.setArg(0, cl_buf_buffer_vals);
 		error = kernel.setArg(1, cl_buf_lower_pivot_sample);
 		error = kernel.setArg(2, cl_buf_upper_pivot_sample);
 		error = kernel.setArg(3, cl_buf_equal_pivot_sample);
-		error = kernel.setArg(4, worker::values::get_state()->total_values_counted);
-		error = kernel.setArg(5, p);
-		error = kernel.setArg(6, h);
-		error = kernel.setArg(7, l);
+		error = kernel.setArg(4, cl_buf_total_values_local);
+		error = kernel.setArg(5, cl_buf_lows_local);
+		error = kernel.setArg(6, cl_buf_highs_local);
+		error = kernel.setArg(7, cl_buf_equals_local);
+		error = kernel.setArg(8, worker::values::get_state()->total_values_counted);
+		error = kernel.setArg(9, p);
+		error = kernel.setArg(10, h);
+		error = kernel.setArg(11, l);
 
 		cl::CommandQueue queue(context, device);
 		error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(n));
@@ -205,67 +205,18 @@ void _process_segment_data(double* values, size_t n,
 		error = queue.enqueueReadBuffer(cl_buf_lower_pivot_sample, CL_TRUE, 0, sizeof(double), &lower_pivot_sample);
 		error = queue.enqueueReadBuffer(cl_buf_upper_pivot_sample, CL_TRUE, 0, sizeof(double), &upper_pivot_sample);
 		error = queue.enqueueReadBuffer(cl_buf_equal_pivot_sample, CL_TRUE, 0, sizeof(double), &equal_pivot_sample);
+		error = queue.enqueueReadBuffer(cl_buf_total_values_local, CL_TRUE, 0, sizeof(double), &total_values_local);
+		error = queue.enqueueReadBuffer(cl_buf_lows_local, CL_TRUE, 0, sizeof(double), &lows_local);
+		error = queue.enqueueReadBuffer(cl_buf_highs_local, CL_TRUE, 0, sizeof(double), &highs_local);
+		error = queue.enqueueReadBuffer(cl_buf_equals_local, CL_TRUE, 0, sizeof(double), &equals_local);
 		cl::finish();
-
-		tbb::combinable<size_t> total_values_comb(0);
-
-		// Parallel work (job)
-		auto work = [&](tbb::blocked_range<size_t> it)
-		{
-			size_t& total_values_local = total_values_comb.local();
-
-			size_t lows_local = 0;
-			size_t highs_local = 0;
-			size_t equals_local = 0;
-
-			for (size_t i = it.begin(); i < it.end(); ++i)
-			{
-				if (worker::values::get_state()->terminate_process_requested) return;
-
-				if (values[i] > 0)
-				{
-					// Count total (valid) values, if not counted yet...
-					if (!worker::values::get_state()->total_values_counted)
-						total_values_local++;
-
-					if (values[i] > 3)
-					{
-						equals_local++;
-						equals_any = true;
-					}
-					else if (values[i] > 2)
-					{
-						highs_local++;
-						highs_any = true;
-					}
-					else if (values[i] > 1)
-					{
-						lows_local++;
-						lows_any = true;
-					}
-				}
-			}
-
-			// Count the job values
-			const std::lock_guard<std::mutex> lock(_i_bucket_mutex);
-			*lows += lows_local;
-			*highs += highs_local;
-			*equals += equals_local;
-		};
-
-		// Process buffer chunks in parallel
-		tbb::parallel_for(tbb::blocked_range<std::size_t>(0, n), work);
 
 		// Combine values
 		if (!worker::values::get_state()->total_values_counted)
-			*total_values += total_values_comb.combine(std::plus<>());
-
-		if (lows_any)
-			pivot_lower_samples->push_back(lower_pivot_sample);
-		if (highs_any)
-			pivot_upper_samples->push_back(upper_pivot_sample);
-		if (equals_any)
-			pivot_equal_samples->push_back(equal_pivot_sample);
+			*total_values += total_values_local;
+		// Count the job values
+		_process_segment_data_count(lows_local, highs_local, equals_local, lower_pivot_sample, upper_pivot_sample, equal_pivot_sample,
+			lows, highs, equals, pivot_lower_samples, pivot_upper_samples, pivot_equal_samples);
 	}
 	// If multithread processing...
 	else if (*worker::values::get_processing_type() == worker::values::ProcessingType::MultiThread)
@@ -356,7 +307,7 @@ void worker::bucket::find(std::ifstream* file, size_t* fsize, int percentil,
 	float pctp_offset = 0; // offset % from the lowest (initial) limit to the current one; it maintain percentil position in all data sequence
 
 	double bucket_pivot_val = 0; // initial pivot value of currently calculated bucket
-	size_t lows = 0; // Bucket numers lower than pivot
+	size_t lows = 0; // Bucket numbers lower than pivot
 	size_t highs = 0; // Bucket numbers greater than pivot
 	size_t equals = 0; // Bucket numbers equal to pivot
 	std::vector<double> pivot_lower_samples;
