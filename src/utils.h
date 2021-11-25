@@ -22,6 +22,21 @@
 namespace utils
 {
 	/// <summary>
+	/// Set default state of cout
+	/// </summary>
+	void cout_toggle_set_default(bool def);
+
+	/// <summary>
+	/// Toggle cout output to turn on or off
+	/// </summary>
+	void cout_toggle(bool toggle);
+
+	/// <summary>
+	/// Set cout to default state
+	/// </summary>
+	void cout_toggle_to_default();
+
+	/// <summary>
 	/// Frees buffer, if any.
 	/// </summary>
 	void fi_try_free_buffer(char** buffer);

@@ -20,6 +20,7 @@ namespace constants
 	//const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT = 50 * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
 	//const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_CL = (unsigned int)ceil(50 / 2.5) * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
 	//const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT = 4 * 8; // in bytes (divisible by sizeof(double))
+	//const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_CL = 4 * 8; // in bytes (divisible by sizeof(double))
 
 	/// <summary>
 	/// Additional sorting memory that is taken above SEGMENT_SEARCH_MEMORY_LIMIT.
@@ -29,5 +30,5 @@ namespace constants
 	/// <summary>
 	/// Watchdog check interval
 	/// </summary>
-	const unsigned int WATCHDOG_TIME_INTERVAL = 30; // in seconds
+	const unsigned int WATCHDOG_TIME_INTERVAL = 15; // in seconds
 }

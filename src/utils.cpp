@@ -1,5 +1,26 @@
 #include "utils.h"
 
+// Default cout state
+bool cout_default_toggle_state = true;
+
+void utils::cout_toggle_set_default(bool def)
+{
+	cout_default_toggle_state = def;
+}
+
+void utils::cout_toggle(bool toggle)
+{
+	if (toggle)
+		std::cout.clear();
+	else
+		std::cout.setstate(std::ios::failbit);
+}
+
+void utils::cout_toggle_to_default()
+{
+	utils::cout_toggle(cout_default_toggle_state);
+}
+
 void utils::fi_try_free_buffer(char** buffer)
 {
 	// Free buffer from previous calculation...

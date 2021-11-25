@@ -54,16 +54,16 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 		// get durarion. To cast it to proper unit
 		// use duration cast method
 		auto duration = std::chrono::duration_cast<std::chrono::seconds>(time_stop - time_start);
-
-		DEBUG_MSG("Time taken to find final bucket: "
-			<< duration.count() << " seconds" << std::endl << std::endl);
-
-		// Get starting timepoint
-		time_start = std::chrono::high_resolution_clock::now();
+		DEBUG_MSG("/// Time taken to find final bucket: "
+			<< duration.count() << " seconds" << std::endl);
+		DEBUG_MSG("//////////////////////////////////////////////////" << std::endl << std::endl);
 
 		// If valid data
 		if (total_values > 0)
 		{
+			// Get starting timepoint
+			time_start = std::chrono::high_resolution_clock::now();
+
 			// If the data is NOT sequence of the same single number...
 			if (bucket_lower_val != bucket_upper_val)
 			{
@@ -94,8 +94,9 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 			// Get ending timepoint
 			time_stop = std::chrono::high_resolution_clock::now();
 			duration = std::chrono::duration_cast<std::chrono::seconds>(time_stop - time_start);
-			DEBUG_MSG("Time taken to find percentil: "
-				<< duration.count() << " seconds" << std::endl << std::endl);
+			DEBUG_MSG("/// Time taken to find percentil: "
+				<< duration.count() << " seconds" << std::endl);
+			DEBUG_MSG("//////////////////////////////////////////////////" << std::endl << std::endl);
 
 			// Get starting timepoint
 			time_start = std::chrono::high_resolution_clock::now();
@@ -114,18 +115,23 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 			// Get ending timepoint
 			time_stop = std::chrono::high_resolution_clock::now();
 			duration = std::chrono::duration_cast<std::chrono::seconds>(time_stop - time_start);
-			DEBUG_MSG("Time taken to find result: "
-				<< duration.count() << " seconds" << std::endl << std::endl);
+			DEBUG_MSG("/// Time taken to find result: "
+				<< duration.count() << " seconds" << std::endl);
+			DEBUG_MSG("//////////////////////////////////////////////////" << std::endl << std::endl);
 
+			utils::cout_toggle(true);
 			std::cout << std::hexfloat << percentil_value << std::defaultfloat;
 			std::cout << " " << (first_occurance_index * 8);
 			std::cout << " " << (last_occurance_index * 8);
 			std::cout << std::endl;
+			utils::cout_toggle_to_default();
 		}
 		// Otherwise, invalid data
 		else
 		{
+			utils::cout_toggle(true);
 			std::cout << "Invalid data!" << std::endl;
+			utils::cout_toggle_to_default();
 			worker::values::get_state()->bucket_found = true;
 			worker::values::get_state()->percentil_search_done = true;
 			worker::values::get_state()->waiting_for_percentil_pickup = true;
@@ -137,7 +143,9 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 	}
 	else
 	{
+		utils::cout_toggle(true);
 		std::cout << "Unable to open file!" << std::endl;
+		utils::cout_toggle_to_default();
 	}
 
 	//mymem::print_counter();
