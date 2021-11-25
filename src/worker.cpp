@@ -101,8 +101,8 @@ void worker::run(worker::values::State* state, std::string filePath, int percent
 			time_start = std::chrono::high_resolution_clock::now();
 
 			// 3. - Find result
-			size_t first_occurance_index = (size_t)NAN;
-			size_t last_occurance_index = (size_t)NAN;
+			size_t first_occurance_index = 0;
+			size_t last_occurance_index = 0;
 			DEBUG_MSG("Finding result..." << std::endl);
 			worker::result::find(&file, &fsize, percentil_value, &first_occurance_index, &last_occurance_index);
 			DEBUG_MSG("Result succesfully found!" << std::endl << std::endl);

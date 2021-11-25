@@ -28,11 +28,11 @@ std::string _find_result_job()
 
 			if (normal && v == percentil_value)
 			{
-				data[i] = i;
+				data[i] = 1;
 			}
 			else
 			{
-				data[i] = -1;
+				data[i] = 0;
 			}
 		}
 	)CLC";
@@ -52,10 +52,10 @@ void _find_result_job(double* buffer, size_t i, double percentil_value, bool* fi
 	{
 		if (!*first_set)
 		{
-			*first_occurance_index = i;
 			*first_set = true;
+			*first_occurance_index = i + 1;
 		}
-		*last_occurance_index = i;
+		*last_occurance_index = i + 1;
 	}
 }
 
@@ -73,6 +73,9 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 	char* buffer = nullptr;
 	size_t buffer_size = 0;
 
+	bool first_set = false;
+	size_t total_buckets_index = 0;
+
 	// Iterate over the segments
 	// ... to preserve the memory limit
 	fi_fsize_remaining = *fsize;
@@ -89,7 +92,10 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 		(*file).seekg(fi_seekfrom, std::ios::beg);
 		(*file).read(buffer, buffer_size);
 
-		bool first_set = false;
+		size_t first_occurance_index_local = 0;
+		size_t last_occurance_index_local = 0;
+
+		total_buckets_index += buffer_size / sizeof(double);
 
 		// If OpenCL processing...
 		if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL)
@@ -121,21 +127,25 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 					if (worker::values::get_state()->terminate_process_requested) return;
 
 					double v = ((double*)buffer)[i];
-					if (v >= 0)
+					
+					if (v > 0)
 					{
 						const std::lock_guard<std::mutex> lock(_i_result_mutex);
 						if (!first_set)
 						{
-							*first_occurance_index = i;
 							first_set = true;
+							first_occurance_index_local = i + 1;
 						}
-						*last_occurance_index = i;
+						last_occurance_index_local = i + 1;
 					}
 				}
 			};
 
 			// Process buffer chunks in parallel
 			tbb::parallel_for(tbb::blocked_range<std::size_t>(0, buffer_size / sizeof(double)), work);
+
+			*first_occurance_index = first_occurance_index_local > 0 ? first_occurance_index_local + total_buckets_index : 0;
+			*last_occurance_index = last_occurance_index_local > 0 ? last_occurance_index_local + total_buckets_index : 0;
 		}
 		// If multithread processing...
 		else if (*worker::values::get_processing_type() == worker::values::ProcessingType::MultiThread)
@@ -149,12 +159,15 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 
 					// Do the job
 					const std::lock_guard<std::mutex> lock(_i_result_mutex);
-					_find_result_job((double*)buffer, i, percentil_value, &first_set, first_occurance_index, last_occurance_index);
+					_find_result_job((double*)buffer, i, percentil_value, &first_set, &first_occurance_index_local, &last_occurance_index_local);
 				}
 			};
 
 			// Process buffer chunks in parallel
 			tbb::parallel_for(tbb::blocked_range<std::size_t>(0, buffer_size / sizeof(double)), work);
+
+			*first_occurance_index = first_occurance_index_local > 0 ? first_occurance_index_local + total_buckets_index : 0;
+			*last_occurance_index = last_occurance_index_local > 0 ? last_occurance_index_local + total_buckets_index : 0;
 		}
 		// Otherwise, rest processing types...
 		else
@@ -166,10 +179,17 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 				if (worker::values::get_state()->terminate_process_requested) return;
 
 				// Do the job
-				_find_result_job((double*)buffer, i, percentil_value, &first_set, first_occurance_index, last_occurance_index);
+				_find_result_job((double*)buffer, i, percentil_value, &first_set, &first_occurance_index_local, &last_occurance_index_local);
 			}
+
+			*first_occurance_index = first_occurance_index_local > 0 ? first_occurance_index_local + total_buckets_index : 0;
+			*last_occurance_index = last_occurance_index_local > 0 ? last_occurance_index_local + total_buckets_index : 0;
 		}
 	}
+
+	// Indexing starts at 0, take care of it
+	*first_occurance_index -= 1;
+	*last_occurance_index -= 1;
 
 	// Free the last buffer once done
 	utils::fi_try_free_buffer(&buffer);
