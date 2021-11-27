@@ -110,8 +110,8 @@ int main(int argc, char* argv[])
 		{
 			filePath = p1;
 			percentil = std::stoi(p2);
-			processing_type = p3 == "OpenCL" ? worker::values::ProcessingType::OpenCL
-				: (p3 == "SMP" ? worker::values::ProcessingType::MultiThread : worker::values::ProcessingType::SingleThread);
+			processing_type = strcmp(p3, "OpenCL") == 0 ? worker::values::ProcessingType::OpenCL
+				: (strcmp(p3, "SMP") == 0 ? worker::values::ProcessingType::MultiThread : worker::values::ProcessingType::SingleThread);
 
 			ok_to_run = true;
 		}
