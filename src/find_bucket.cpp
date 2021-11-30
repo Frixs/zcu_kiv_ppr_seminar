@@ -161,7 +161,7 @@ void _process_segment_data(double* values, size_t n,
 	// If OpenCL processing...
 	if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL)
 	{
-		auto program = utils::cl_create_program(_process_segment_data_job());
+		auto program = utils::cl_create_program(_process_segment_data_job(), *worker::values::get_processing_type_value());
 		auto context = program.getInfo<CL_PROGRAM_CONTEXT>();
 		auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
 		auto& device = devices.front();

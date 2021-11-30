@@ -69,11 +69,11 @@ namespace utils
 	/// Gets PTR to copy of OpenCL GPU Device
 	/// Throws error if something goes wrong.
 	/// </summary>
-	cl::Device cl_get_gpu_device();
+	cl::Device cl_get_gpu_device(const std::string& device_name);
 
 	/// <summary>
 	/// Create program for inputing source code to process.
 	/// Throws error if something goes wrong.
 	/// </summary>
-	cl::Program cl_create_program(const std::string& src);
+	cl::Program cl_create_program(const std::string& src, const std::string& device_name);
 }

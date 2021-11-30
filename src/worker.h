@@ -21,5 +21,5 @@ namespace worker
 	/// <summary>
 	/// Run the worker process
 	/// </summary>
-	void run(worker::values::State* state, std::string filePath, int percentil, worker::values::ProcessingType* processing_type);
+	void run(std::string filePath, int percentil);
 }

@@ -64,7 +64,7 @@ bool check_parameters(char* p1, char* p2, char* p3)
 		return false;
 	}
 	
-	if (strcmp(p3, "single") != 0 && strcmp(p3, "SMP") != 0 && strcmp(p3, "OpenCL") != 0)
+	if (strcmp(p3, "single") != 0 && strcmp(p3, "SMP") != 0 && strlen(p3) < 1)
 	{
 		std::cout << "Invalid computation type!" << std::endl;
 		return false;
@@ -82,6 +82,7 @@ int main(int argc, char* argv[])
 	std::string filePath = "";
 	int percentil = 1;
 	auto processing_type = worker::values::ProcessingType::SingleThread;
+	std::string processing_type_value;
 
 	// Get parameters
 	if (argc > 3)
@@ -110,8 +111,10 @@ int main(int argc, char* argv[])
 		{
 			filePath = p1;
 			percentil = std::stoi(p2);
-			processing_type = strcmp(p3, "OpenCL") == 0 ? worker::values::ProcessingType::OpenCL
-				: (strcmp(p3, "SMP") == 0 ? worker::values::ProcessingType::MultiThread : worker::values::ProcessingType::SingleThread);
+			processing_type = strcmp(p3, "single") == 0 ? worker::values::ProcessingType::SingleThread
+				: (strcmp(p3, "SMP") == 0 ? worker::values::ProcessingType::MultiThread : worker::values::ProcessingType::OpenCL);
+			if (strcmp(p3, "single") != 0 && strcmp(p3, "SMP") != 0)
+				processing_type_value = p3;
 
 			ok_to_run = true;
 		}
@@ -137,7 +140,9 @@ int main(int argc, char* argv[])
 		do
 		{
 			state.set_defaults();
-			worker::run(&state, filePath, percentil, &processing_type);
+			worker::values::init(&state, &processing_type, &processing_type_value);
+			worker::run(filePath, percentil);
+
 		} while (state.recovery_requested);
 
 		// Wait for shutting down the watchdog...
@@ -153,7 +158,7 @@ int main(int argc, char* argv[])
 		std::cout << "1: " << std::setw(7) << "text" << std::setw(5) << "" << "Toggle verbose output" << std::endl;
 		std::cout << "2: " << std::setw(7) << "text" << std::setw(5) << "" << "Data file path" << std::endl;
 		std::cout << "3: " << std::setw(7) << "number" << std::setw(5) << "" << "Searched percentil <1,100>" << std::endl;
-		std::cout << "4: " << std::setw(7) << "text" << std::setw(5) << "" << "Type of computation (single|SMP|OpenCL)" << std::endl;
+		std::cout << "4: " << std::setw(7) << "text" << std::setw(5) << "" << "Type of computation (single|SMP|OPEN_CL_DEVICE_NAME)" << std::endl;
 		std::cout << "=========================================================================" << std::endl;
 		utils::cout_toggle_to_default();
 	}

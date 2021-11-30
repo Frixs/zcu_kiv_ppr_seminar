@@ -2,11 +2,8 @@
 
 #pragma region Process Functions
 
-void worker::run(worker::values::State* state, std::string filePath, int percentil, worker::values::ProcessingType* processing_type)
+void worker::run(std::string filePath, int percentil)
 {
-	// Assign new state
-	worker::values::init(state, processing_type);
-
 	// Open file
 	std::ifstream file(filePath, std::ios::binary);
 	if (file.is_open())

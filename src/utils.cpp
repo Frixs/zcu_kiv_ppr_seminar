@@ -85,7 +85,7 @@ size_t utils::generate_rand(size_t max)
 	return rand() % (max + 1); // 0 .. max
 }
 
-cl::Device utils::cl_get_gpu_device()
+cl::Device utils::cl_get_gpu_device(const std::string& device_name)
 {
 	std::vector<cl::Platform> platforms;
 	cl::Platform::get(&platforms);
@@ -94,26 +94,33 @@ cl::Device utils::cl_get_gpu_device()
 	{
 		auto platform = platforms.front();
 		std::vector<cl::Device> devices;
-		platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
+		platform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
 
-		if (devices.size() > 0)
-			return devices.front();
+		for (auto& device : devices)
+		{
+			std::string name = device.getInfo<CL_DEVICE_NAME>().c_str();
+			if (name == device_name)
+				return device;
+		}
 	}
 
+	DEBUG_MSG("Error occurred while selecting the OpenCL GPU device." << std::endl);
 	throw std::runtime_error("Error occurred while selecting the OpenCL GPU device.");
 	return cl::Device();
 }
 
-cl::Program utils::cl_create_program(const std::string& src)
+cl::Program utils::cl_create_program(const std::string& src, const std::string& device_name)
 {
-	cl_int error;
+	cl_int error = 0;
 
-	cl::Context context(utils::cl_get_gpu_device());
+	cl::Context context(utils::cl_get_gpu_device(device_name));
 	cl::Program program(context, src);
 
-	error = program.build("-cl-std=CL1.2");
-	if (error != CL_BUILD_SUCCESS)
-	{
+	try {
+		program.build("-cl-std=CL1.2");
+	}
+	catch (...) {
+		DEBUG_MSG("Error occurred while building the OpenCL program: " << std::to_string(error) << std::endl);
 		throw std::runtime_error("Error occurred while building the OpenCL program: " + std::to_string(error));
 	}
 

@@ -16,7 +16,7 @@ namespace constants
 	/// Limit algorithm program memory
 	/// </summary>
 	const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT = SEGMENT_SEARCH_MEMORY_LIMIT_VALUE * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
-	const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_CL = (unsigned int)ceil(SEGMENT_SEARCH_MEMORY_LIMIT_VALUE / 2.5) * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
+	const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_CL = (unsigned int)ceil(SEGMENT_SEARCH_MEMORY_LIMIT_VALUE / 2.6) * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
 	//const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT = 50 * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
 	//const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_CL = (unsigned int)ceil(50 / 2.5) * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
 	//const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT = 4 * 8; // in bytes (divisible by sizeof(double))

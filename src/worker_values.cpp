@@ -6,6 +6,9 @@ worker::values::State* _state;
 /// Processing type of the currently processing worker
 worker::values::ProcessingType* _processing_type;
 
+/// Processing type value (OpenCL specific)
+std::string* _processing_type_value;
+
 
 
 worker::values::State* worker::values::get_state()
@@ -18,10 +21,16 @@ worker::values::ProcessingType* worker::values::get_processing_type()
 	return _processing_type;
 }
 
-void worker::values::init(worker::values::State* state, worker::values::ProcessingType* processing_type)
+std::string* worker::values::get_processing_type_value()
+{
+	return _processing_type_value;
+}
+
+void worker::values::init(worker::values::State* state, worker::values::ProcessingType* processing_type, std::string* processing_type_value)
 {
 	_state = state;
 	_processing_type = processing_type;
+	_processing_type_value = processing_type_value;
 }
 
 #pragma region State Class

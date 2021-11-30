@@ -50,6 +50,7 @@ namespace worker
 
 		worker::values::State* get_state();
 		worker::values::ProcessingType* get_processing_type();
-		void init(worker::values::State* state, worker::values::ProcessingType* processing_type);
+		std::string* get_processing_type_value();
+		void init(worker::values::State* state, worker::values::ProcessingType* processing_type, std::string* processing_type_value);
 	}
 }

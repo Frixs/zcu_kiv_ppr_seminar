@@ -98,7 +98,7 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 		// If OpenCL processing...
 		if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL)
 		{
-			auto program = utils::cl_create_program(_find_result_job());
+			auto program = utils::cl_create_program(_find_result_job(), *worker::values::get_processing_type_value());
 			auto context = program.getInfo<CL_PROGRAM_CONTEXT>();
 			auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
 			auto& device = devices.front();
