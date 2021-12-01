@@ -68,7 +68,8 @@ void worker::run(std::string filePath, int percentil)
 				DEBUG_MSG("Selecting percentil value..." << std::endl);
 				worker::percentil::find(&file, &fsize, total_values, percentil, bucket_lower_val, bucket_upper_val, bucket_value_offset, bucket_total_found, &percentil_value);
 				DEBUG_MSG("Percentil value succesfully selected!" << std::endl << std::endl);
-				if (worker::values::get_state()->terminate_process_requested) return;
+				if (worker::values::get_state()->terminate_process_requested)
+					return;
 			}
 			// Otherwise, there is only 1 number...
 			else
@@ -121,13 +122,15 @@ void worker::run(std::string filePath, int percentil)
 			std::cout << " " << (first_occurance_index * 8);
 			std::cout << " " << (last_occurance_index * 8);
 			std::cout << std::endl;
+			if (utils::cl_any_error_code()) std::cout << utils::cl_str_error_code_buffer() << std::endl;
 			utils::cout_toggle_to_default();
 		}
 		// Otherwise, invalid data
 		else
 		{
 			utils::cout_toggle(true);
-			std::cout << "Invalid data!" << std::endl;
+			std::cout << "Invalid data! No data to process!" << std::endl;
+			if (utils::cl_any_error_code()) std::cout << utils::cl_str_error_code_buffer() << std::endl;
 			utils::cout_toggle_to_default();
 			worker::values::get_state()->bucket_found = true;
 			worker::values::get_state()->percentil_search_done = true;

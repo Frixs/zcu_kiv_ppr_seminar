@@ -110,21 +110,21 @@ void worker::percentil::find(std::ifstream* file, size_t* fsize, size_t total_va
 			auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
 			auto& device = devices.front();
 
-			cl_int error;
+			cl_int error = 0;
 
-			cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, buffer_size, (double*)buffer, &error);
+			cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, buffer_size, (double*)buffer, &error); utils::cl_track_error_code(error, 2);
 
 			cl::Kernel kernel(program, "run");
-			error = kernel.setArg(0, cl_buf_buffer_vals);
-			error = kernel.setArg(1, bucket_upper_val);
-			error = kernel.setArg(2, bucket_lower_val);
-			error = kernel.setArg(3, std::numeric_limits<double>::infinity());
+			error = kernel.setArg(0, cl_buf_buffer_vals); utils::cl_track_error_code(error, 2);
+			error = kernel.setArg(1, bucket_upper_val); utils::cl_track_error_code(error, 2);
+			error = kernel.setArg(2, bucket_lower_val); utils::cl_track_error_code(error, 2);
+			error = kernel.setArg(3, std::numeric_limits<double>::infinity()); utils::cl_track_error_code(error, 2);
 
 			cl::CommandQueue queue(context, device);
-			error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(buffer_size / sizeof(double)));
+			error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(buffer_size / sizeof(double))); utils::cl_track_error_code(error, 2);
 
-			error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, buffer_size, (double*)buffer);
-			cl::finish();
+			error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, buffer_size, (double*)buffer); utils::cl_track_error_code(error, 2);
+			error = cl::finish(); utils::cl_track_error_code(error, 2);
 
 			// Finalize computation
 			for (size_t i = 0; i < buffer_size / sizeof(double); ++i)

@@ -1,11 +1,14 @@
 #include "utils.h"
 
+// CL error code buffer
+std::vector<std::vector<cl_int>> _cl_error_code_buffer{ {}, {}, {} };
+
 // Default cout state
-bool cout_default_toggle_state = true;
+bool _cout_default_toggle_state = true;
 
 void utils::cout_toggle_set_default(bool def)
 {
-	cout_default_toggle_state = def;
+	_cout_default_toggle_state = def;
 }
 
 void utils::cout_toggle(bool toggle)
@@ -18,7 +21,7 @@ void utils::cout_toggle(bool toggle)
 
 void utils::cout_toggle_to_default()
 {
-	utils::cout_toggle(cout_default_toggle_state);
+	utils::cout_toggle(_cout_default_toggle_state);
 }
 
 void utils::fi_try_free_buffer(char** buffer)
@@ -124,4 +127,38 @@ cl::Program utils::cl_create_program(const std::string& src, const std::string& 
 	}
 
 	return program;
+}
+
+void utils::cl_track_error_code(cl_int error_code, int idx)
+{
+	if (error_code == 0)
+		return;
+
+	if (_cl_error_code_buffer[idx - 1].size() > 0)
+		_cl_error_code_buffer[idx - 1][0] = error_code;
+	else
+		_cl_error_code_buffer[idx - 1].push_back(error_code);
+}
+
+bool utils::cl_any_error_code()
+{
+	for (size_t i = 0; i < _cl_error_code_buffer.size(); ++i)
+		if (_cl_error_code_buffer[i].size() > 0)
+			return true;
+	return false;
+}
+
+std::string utils::cl_str_error_code_buffer()
+{
+	std::string str = "CL error codes: { ";
+	for (size_t i = 0; i < _cl_error_code_buffer.size(); ++i)
+	{
+		if (_cl_error_code_buffer[i].size() > 0)
+			str += std::to_string(_cl_error_code_buffer[i][0]) + " ";
+		else
+			str += "- ";
+	}
+	str += "}";
+
+	return str;
 }

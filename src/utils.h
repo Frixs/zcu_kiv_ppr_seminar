@@ -76,4 +76,19 @@ namespace utils
 	/// Throws error if something goes wrong.
 	/// </summary>
 	cl::Program cl_create_program(const std::string& src, const std::string& device_name);
+
+	/// <summary>
+	/// Track error by adding it into CL error code buffer
+	/// </summary>
+	void cl_track_error_code(cl_int error_code, int idx);
+
+	/// <summary>
+	/// Check if any CL error codes
+	/// </summary>
+	bool cl_any_error_code();
+
+	/// <summary>
+	/// Gets the CL error code buffer
+	/// </summary>
+	std::string cl_str_error_code_buffer();
 }

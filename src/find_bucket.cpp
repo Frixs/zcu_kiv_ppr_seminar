@@ -166,7 +166,7 @@ void _process_segment_data(double* values, size_t n,
 		auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
 		auto& device = devices.front();
 
-		cl_int error;
+		cl_int error = 0;
 		size_t total_values_local = 0;
 		size_t lows_local = 0;
 		size_t highs_local = 0;
@@ -175,41 +175,41 @@ void _process_segment_data(double* values, size_t n,
 		double upper_pivot_sample = NAN;
 		double equal_pivot_sample = NAN;
 
-		cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, n * sizeof(double), values, &error);
-		cl::Buffer cl_buf_lower_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
-		cl::Buffer cl_buf_upper_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
-		cl::Buffer cl_buf_equal_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
-		cl::Buffer cl_buf_total_values_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
-		cl::Buffer cl_buf_lows_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
-		cl::Buffer cl_buf_highs_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
-		cl::Buffer cl_buf_equals_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error);
+		cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, n * sizeof(double), values, &error); utils::cl_track_error_code(error, 1);
+		cl::Buffer cl_buf_lower_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error); utils::cl_track_error_code(error, 1);
+		cl::Buffer cl_buf_upper_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error); utils::cl_track_error_code(error, 1);
+		cl::Buffer cl_buf_equal_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error); utils::cl_track_error_code(error, 1);
+		cl::Buffer cl_buf_total_values_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error); utils::cl_track_error_code(error, 1);
+		cl::Buffer cl_buf_lows_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error); utils::cl_track_error_code(error, 1);
+		cl::Buffer cl_buf_highs_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error); utils::cl_track_error_code(error, 1);
+		cl::Buffer cl_buf_equals_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY, sizeof(double), nullptr, &error); utils::cl_track_error_code(error, 1);
 
 		cl::Kernel kernel(program, "run");
-		error = kernel.setArg(0, cl_buf_buffer_vals);
-		error = kernel.setArg(1, cl_buf_lower_pivot_sample);
-		error = kernel.setArg(2, cl_buf_upper_pivot_sample);
-		error = kernel.setArg(3, cl_buf_equal_pivot_sample);
-		error = kernel.setArg(4, cl_buf_total_values_local);
-		error = kernel.setArg(5, cl_buf_lows_local);
-		error = kernel.setArg(6, cl_buf_highs_local);
-		error = kernel.setArg(7, cl_buf_equals_local);
-		error = kernel.setArg(8, worker::values::get_state()->total_values_counted);
-		error = kernel.setArg(9, p);
-		error = kernel.setArg(10, h);
-		error = kernel.setArg(11, l);
+		error = kernel.setArg(0, cl_buf_buffer_vals); utils::cl_track_error_code(error, 1);
+		error = kernel.setArg(1, cl_buf_lower_pivot_sample); utils::cl_track_error_code(error, 1);
+		error = kernel.setArg(2, cl_buf_upper_pivot_sample); utils::cl_track_error_code(error, 1);
+		error = kernel.setArg(3, cl_buf_equal_pivot_sample); utils::cl_track_error_code(error, 1);
+		error = kernel.setArg(4, cl_buf_total_values_local); utils::cl_track_error_code(error, 1);
+		error = kernel.setArg(5, cl_buf_lows_local); utils::cl_track_error_code(error, 1);
+		error = kernel.setArg(6, cl_buf_highs_local); utils::cl_track_error_code(error, 1);
+		error = kernel.setArg(7, cl_buf_equals_local); utils::cl_track_error_code(error, 1);
+		error = kernel.setArg(8, worker::values::get_state()->total_values_counted); utils::cl_track_error_code(error, 1);
+		error = kernel.setArg(9, p); utils::cl_track_error_code(error, 1);
+		error = kernel.setArg(10, h); utils::cl_track_error_code(error, 1);
+		error = kernel.setArg(11, l); utils::cl_track_error_code(error, 1);
 
 		cl::CommandQueue queue(context, device);
 		error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(n));
 
-		error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, n * sizeof(double), values);
-		error = queue.enqueueReadBuffer(cl_buf_lower_pivot_sample, CL_TRUE, 0, sizeof(double), &lower_pivot_sample);
-		error = queue.enqueueReadBuffer(cl_buf_upper_pivot_sample, CL_TRUE, 0, sizeof(double), &upper_pivot_sample);
-		error = queue.enqueueReadBuffer(cl_buf_equal_pivot_sample, CL_TRUE, 0, sizeof(double), &equal_pivot_sample);
-		error = queue.enqueueReadBuffer(cl_buf_total_values_local, CL_TRUE, 0, sizeof(double), &total_values_local);
-		error = queue.enqueueReadBuffer(cl_buf_lows_local, CL_TRUE, 0, sizeof(double), &lows_local);
-		error = queue.enqueueReadBuffer(cl_buf_highs_local, CL_TRUE, 0, sizeof(double), &highs_local);
-		error = queue.enqueueReadBuffer(cl_buf_equals_local, CL_TRUE, 0, sizeof(double), &equals_local);
-		cl::finish();
+		error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, n * sizeof(double), values); utils::cl_track_error_code(error, 1);
+		error = queue.enqueueReadBuffer(cl_buf_lower_pivot_sample, CL_TRUE, 0, sizeof(double), &lower_pivot_sample); utils::cl_track_error_code(error, 1);
+		error = queue.enqueueReadBuffer(cl_buf_upper_pivot_sample, CL_TRUE, 0, sizeof(double), &upper_pivot_sample); utils::cl_track_error_code(error, 1);
+		error = queue.enqueueReadBuffer(cl_buf_equal_pivot_sample, CL_TRUE, 0, sizeof(double), &equal_pivot_sample); utils::cl_track_error_code(error, 1);
+		error = queue.enqueueReadBuffer(cl_buf_total_values_local, CL_TRUE, 0, sizeof(double), &total_values_local); utils::cl_track_error_code(error, 1);
+		error = queue.enqueueReadBuffer(cl_buf_lows_local, CL_TRUE, 0, sizeof(double), &lows_local); utils::cl_track_error_code(error, 1);
+		error = queue.enqueueReadBuffer(cl_buf_highs_local, CL_TRUE, 0, sizeof(double), &highs_local); utils::cl_track_error_code(error, 1);
+		error = queue.enqueueReadBuffer(cl_buf_equals_local, CL_TRUE, 0, sizeof(double), &equals_local); utils::cl_track_error_code(error, 1);
+		error = cl::finish(); utils::cl_track_error_code(error, 1);
 
 		// Combine values
 		if (!worker::values::get_state()->total_values_counted)
