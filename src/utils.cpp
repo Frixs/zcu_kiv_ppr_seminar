@@ -90,9 +90,8 @@ cl::Device utils::cl_get_gpu_device(const std::string& device_name)
 	std::vector<cl::Platform> platforms;
 	cl::Platform::get(&platforms);
 
-	if (platforms.size() > 0)
+	for (auto& platform : platforms)
 	{
-		auto platform = platforms.front();
 		std::vector<cl::Device> devices;
 		platform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
 
