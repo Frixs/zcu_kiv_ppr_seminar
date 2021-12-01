@@ -21,7 +21,7 @@ struct t_watchdog_state
 	size_t bucket_task;
 	size_t percentil_search_task;
 	size_t result_search_task;
-} watchdog_state{};
+} _watchdog_state{};
 
 /// <summary>
 /// Sets the strikes
@@ -121,22 +121,22 @@ int watchdog::run(worker::values::State* state)
 		if (!(*state).terminated && !(*state).terminate_process_requested)
 		{
 			// Test the process
-			int res = _test(state, &watchdog_state);
+			int res = _test(state, &_watchdog_state);
 
 			// Error
-			if (res == 2 || watchdog_state.strikes >= MAX_STRIKES)
+			if (res == 2 || _watchdog_state.strikes >= MAX_STRIKES)
 			{
 				(*state).terminate_process_requested = true;
 				
-				if (watchdog_state.recovery_tries < MAX_RECOVERY_TRIES)
+				if (_watchdog_state.recovery_tries < MAX_RECOVERY_TRIES)
 				{
 					(*state).recovery_requested = true;
-					watchdog_state.recovery_tries++;
-					watchdog_state.strikes = 0;
-					watchdog_state.bucket_task_sub = 0;
-					watchdog_state.bucket_task = 0;
-					watchdog_state.percentil_search_task = 0;
-					watchdog_state.result_search_task = 0;
+					_watchdog_state.recovery_tries++;
+					_watchdog_state.strikes = 0;
+					_watchdog_state.bucket_task_sub = 0;
+					_watchdog_state.bucket_task = 0;
+					_watchdog_state.percentil_search_task = 0;
+					_watchdog_state.result_search_task = 0;
 
 					DEBUG_MSG("##################################################" << std::endl);
 					DEBUG_MSG("[WATCHDOG] Trying to start the job again..." << std::endl);
