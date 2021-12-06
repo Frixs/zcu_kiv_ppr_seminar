@@ -106,8 +106,8 @@ cl::Device utils::cl_get_gpu_device(const std::string& device_name)
 		}
 	}
 
-	DEBUG_MSG("Error occurred while selecting the OpenCL GPU device." << std::endl);
-	throw std::runtime_error("Error occurred while selecting the OpenCL GPU device.");
+	DEBUG_MSG("Error occurred while selecting the OpenCL device." << std::endl);
+	throw std::runtime_error("Error occurred while selecting the OpenCL device.");
 	return cl::Device();
 }
 
