@@ -106,8 +106,8 @@ cl::Device utils::cl_get_gpu_device(const std::string& device_name)
 		}
 	}
 
-	DEBUG_MSG("Error occurred while selecting the OpenCL GPU device." << std::endl);
-	throw std::runtime_error("Error occurred while selecting the OpenCL GPU device.");
+	DEBUG_MSG("Error occurred while selecting the OpenCL device." << std::endl);
+	throw std::runtime_error("Error occurred while selecting the OpenCL device.");
 	return cl::Device();
 }
 
@@ -134,10 +134,19 @@ void utils::cl_track_error_code(cl_int error_code, int idx)
 	if (error_code == 0)
 		return;
 
-	if (_cl_error_code_buffer[idx - 1].size() > 0)
-		_cl_error_code_buffer[idx - 1][0] = error_code;
+	int curr_idx = idx - 1;
+	
+	if (_cl_error_code_buffer.size() < idx)
+	{
+		int req_add = idx - _cl_error_code_buffer.size();
+		for (size_t i = 0; i < req_add; ++i)
+			_cl_error_code_buffer.push_back({});
+	}
+	
+	if (_cl_error_code_buffer[curr_idx].size() > 0)
+		_cl_error_code_buffer[curr_idx][0] = error_code;
 	else
-		_cl_error_code_buffer[idx - 1].push_back(error_code);
+		_cl_error_code_buffer[curr_idx].push_back(error_code);
 }
 
 bool utils::cl_any_error_code()

@@ -105,17 +105,17 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 
 			cl_int error = 0;
 
-			cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, buffer_size, (double*)buffer, &error); utils::cl_track_error_code(error, 3);
+			cl::Buffer cl_buf_buffer_vals(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, buffer_size, (double*)buffer, &error); utils::cl_track_error_code(error, 21);
 
-			cl::Kernel kernel(program, "run");
-			error = kernel.setArg(0, cl_buf_buffer_vals); utils::cl_track_error_code(error, 3);
-			error = kernel.setArg(1, percentil_value); utils::cl_track_error_code(error, 3);
+			cl::Kernel kernel(program, "run", &error); utils::cl_track_error_code(error, 22);
+			error = kernel.setArg(0, cl_buf_buffer_vals); utils::cl_track_error_code(error, 23);
+			error = kernel.setArg(1, percentil_value); utils::cl_track_error_code(error, 23);
 
 			cl::CommandQueue queue(context, device);
-			error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(buffer_size / sizeof(double))); utils::cl_track_error_code(error, 3);
+			error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(buffer_size / sizeof(double))); utils::cl_track_error_code(error, 24);
 
-			error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, buffer_size, (double*)buffer); utils::cl_track_error_code(error, 3);
-			error = cl::finish(); utils::cl_track_error_code(error, 3);
+			error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, buffer_size, (double*)buffer); utils::cl_track_error_code(error, 25);
+			error = cl::finish(); utils::cl_track_error_code(error, 26);
 
 			// Parallel work (job)
 			auto work = [&](tbb::blocked_range<size_t> it)
