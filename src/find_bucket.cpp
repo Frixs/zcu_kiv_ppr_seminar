@@ -361,6 +361,10 @@ void worker::bucket::find(std::ifstream* file, size_t* fsize, int percentil,
 
 		// Count found values
 		*bucket_total_found = lows + highs + equals;
+		std::cout << "++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
+		std::cout << "total_values: " << *total_values << std::endl;
+		std::cout << "lows + highs + equals: " << *bucket_total_found << std::endl;
+		std::cout << "++++++++++++++++++++++++++++++++++++++++++++" << std::endl;
 
 		// If there is need for the next segment calculations...
 		if (*bucket_total_found * sizeof(double) > memory_limit)
