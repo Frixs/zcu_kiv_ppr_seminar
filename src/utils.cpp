@@ -131,7 +131,7 @@ cl::Program utils::cl_create_program(const std::string& src, const std::string& 
 
 void utils::cl_track_error_code(cl_int error_code, int idx)
 {
-	if (error_code > 0)
+	if (error_code == 0)
 		return;
 
 	int curr_idx = idx - 1;
