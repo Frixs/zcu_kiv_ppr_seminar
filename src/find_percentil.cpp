@@ -79,7 +79,7 @@ void worker::percentil::find(std::ifstream* file, size_t* fsize, size_t total_va
 	char* buffer = nullptr;
 	size_t buffer_size = 0;
 
-	size_t percentil_pos = (size_t)floor(percentil * total_values / 100.0); // get percentil number position relative to the entire (valid) data sequence
+	size_t percentil_pos = (size_t)std::floor(percentil * total_values / 100.0); // get percentil number position relative to the entire (valid) data sequence
 	size_t percentil_bucket_idx = percentil_pos - bucket_value_offset; //- 1;
 	//if (percentil_bucket_idx > 0) percentil_bucket_idx -= 1;
 
