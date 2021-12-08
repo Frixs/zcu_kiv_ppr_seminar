@@ -103,7 +103,7 @@ void worker::percentil::find(std::ifstream* file, size_t* fsize, size_t total_va
 		(*file).read(buffer, buffer_size);
 
 		// If OpenCL processing...
-		if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL)
+		if (false && *worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL) // ignore OpenCL for this calculation
 		{
 			auto program = utils::cl_create_program(_find_percentil_job(), *worker::values::get_processing_type_value());
 			auto context = program.getInfo<CL_PROGRAM_CONTEXT>();
@@ -124,7 +124,6 @@ void worker::percentil::find(std::ifstream* file, size_t* fsize, size_t total_va
 			error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(buffer_size / sizeof(double))); utils::cl_track_error_code(error, 14);
 
 			error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, buffer_size, (double*)buffer); utils::cl_track_error_code(error, 15);
-			error = cl::finish(); utils::cl_track_error_code(error, 16);
 
 			// Finalize computation
 			for (size_t i = 0; i < buffer_size / sizeof(double); ++i)
