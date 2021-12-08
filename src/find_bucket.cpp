@@ -10,7 +10,7 @@ std::mutex _i_bucket_mutex;
 std::string _process_segment_data_job()
 {
 	std::string code = R"CLC(
-		#pragma OPENCL EXTENSION cl_khr_int64_base_atomics: enable
+		// #pragma OPENCL EXTENSION cl_khr_int64_base_atomics: enable
 
 		/*
 		unsigned int generate_rand(unsigned int i) // 0 .. i
@@ -21,7 +21,6 @@ std::string _process_segment_data_job()
 		*/
 
 		__kernel void run(__global double* data, __global double* lower_pivot_sample, __global double* upper_pivot_sample, __global double* equal_pivot_sample, 
-			volatile __global ulong* total_values_local, volatile __global ulong* lows_local, volatile __global ulong* highs_local, volatile __global ulong* equals_local,
 			const unsigned int total_values_counted, const double p, const double h, const double l)
 		{
 			int i = get_global_id(0);
@@ -39,8 +38,7 @@ std::string _process_segment_data_job()
 
 			if (normal)
 			{
-				if (!total_values_counted)
-					atomic_add(total_values_local, 1);
+				data[i] = 1;
 
 				// Check the limits
 				if (v >= l && v <= h)
@@ -49,21 +47,25 @@ std::string _process_segment_data_job()
 					if (v > p)
 					{
 						*upper_pivot_sample = v;
-						atomic_add(highs_local, 1);
+						data[i] = 3;
 					}
 					// Lower than pivot...
 					else if (v < p)
 					{
 						*lower_pivot_sample = v;
-						atomic_add(lows_local, 1);
+						data[i] = 2;
 					}
 					// Otherwise, equal to pivot...
 					else
 					{
 						*equal_pivot_sample = v;
-						atomic_add(equals_local, 1);
+						data[i] = 4;
 					}
 				}
+			}
+			else
+			{
+				data[i] = 0;
 			}
 		}
 	)CLC";
@@ -181,36 +183,40 @@ void _process_segment_data(double* values, size_t n,
 		cl::Buffer cl_buf_lower_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(double), &lower_pivot_sample, &error); utils::cl_track_error_code(error, 1);
 		cl::Buffer cl_buf_upper_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(double), &upper_pivot_sample, &error); utils::cl_track_error_code(error, 1);
 		cl::Buffer cl_buf_equal_pivot_sample(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(double), &equal_pivot_sample, &error); utils::cl_track_error_code(error, 1);
-		cl::Buffer cl_buf_total_values_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(size_t), &total_values_local, &error); utils::cl_track_error_code(error, 1);
-		cl::Buffer cl_buf_lows_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(size_t), &lows_local, &error); utils::cl_track_error_code(error, 1);
-		cl::Buffer cl_buf_highs_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(size_t), &highs_local, &error); utils::cl_track_error_code(error, 1);
-		cl::Buffer cl_buf_equals_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(size_t), &equals_local, &error); utils::cl_track_error_code(error, 1);
 
 		cl::Kernel kernel(program, "run", &error); utils::cl_track_error_code(error, 2);
 		error = kernel.setArg(0, cl_buf_buffer_vals); utils::cl_track_error_code(error, 3);
 		error = kernel.setArg(1, cl_buf_lower_pivot_sample); utils::cl_track_error_code(error, 3);
 		error = kernel.setArg(2, cl_buf_upper_pivot_sample); utils::cl_track_error_code(error, 3);
 		error = kernel.setArg(3, cl_buf_equal_pivot_sample); utils::cl_track_error_code(error, 3);
-		error = kernel.setArg(4, cl_buf_total_values_local); utils::cl_track_error_code(error, 3);
-		error = kernel.setArg(5, cl_buf_lows_local); utils::cl_track_error_code(error, 3);
-		error = kernel.setArg(6, cl_buf_highs_local); utils::cl_track_error_code(error, 3);
-		error = kernel.setArg(7, cl_buf_equals_local); utils::cl_track_error_code(error, 3);
-		error = kernel.setArg(8, (int)worker::values::get_state()->total_values_counted); utils::cl_track_error_code(error, 3);
-		error = kernel.setArg(9, p); utils::cl_track_error_code(error, 3);
-		error = kernel.setArg(10, h); utils::cl_track_error_code(error, 3);
-		error = kernel.setArg(11, l); utils::cl_track_error_code(error, 3);
+		error = kernel.setArg(4, (int)worker::values::get_state()->total_values_counted); utils::cl_track_error_code(error, 3);
+		error = kernel.setArg(5, p); utils::cl_track_error_code(error, 3);
+		error = kernel.setArg(6, h); utils::cl_track_error_code(error, 3);
+		error = kernel.setArg(7, l); utils::cl_track_error_code(error, 3);
 
 		cl::CommandQueue queue(context, device);
 		error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(n)); utils::cl_track_error_code(error, 4);
 
-		//error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, n * sizeof(double), values); utils::cl_track_error_code(error, 5);
+		error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, n * sizeof(double), values); utils::cl_track_error_code(error, 5);
 		error = queue.enqueueReadBuffer(cl_buf_lower_pivot_sample, CL_TRUE, 0, sizeof(double), &lower_pivot_sample); utils::cl_track_error_code(error, 5);
 		error = queue.enqueueReadBuffer(cl_buf_upper_pivot_sample, CL_TRUE, 0, sizeof(double), &upper_pivot_sample); utils::cl_track_error_code(error, 5);
 		error = queue.enqueueReadBuffer(cl_buf_equal_pivot_sample, CL_TRUE, 0, sizeof(double), &equal_pivot_sample); utils::cl_track_error_code(error, 5);
-		error = queue.enqueueReadBuffer(cl_buf_total_values_local, CL_TRUE, 0, sizeof(size_t), &total_values_local); utils::cl_track_error_code(error, 5);
-		error = queue.enqueueReadBuffer(cl_buf_lows_local, CL_TRUE, 0, sizeof(size_t), &lows_local); utils::cl_track_error_code(error, 5);
-		error = queue.enqueueReadBuffer(cl_buf_highs_local, CL_TRUE, 0, sizeof(size_t), &highs_local); utils::cl_track_error_code(error, 5);
-		error = queue.enqueueReadBuffer(cl_buf_equals_local, CL_TRUE, 0, sizeof(size_t), &equals_local); utils::cl_track_error_code(error, 5);
+		
+		// Finalize computation on CPU
+		for (size_t i = 0; i < n; ++i)
+		{
+			if (values[i] > 0)
+			{
+				total_values_local++;
+				
+				if (values[i] == 4)
+					equals_local++;
+				else if (values[i] == 3)
+					highs_local++;
+				else if (values[i] == 2)
+					lows_local++;
+			}
+		}
 
 		// Combine values
 		if (!worker::values::get_state()->total_values_counted)
