@@ -13,10 +13,15 @@ namespace constants
 	const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_VALUE = 230;
 
 	/// <summary>
+	/// Max allowed memory (in MBs), CL specific
+	/// </summary>
+	const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_CL_VALUE = 30;
+
+	/// <summary>
 	/// Limit algorithm program memory
 	/// </summary>
 	const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT = SEGMENT_SEARCH_MEMORY_LIMIT_VALUE * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
-	const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_CL = (unsigned int)std::ceil(SEGMENT_SEARCH_MEMORY_LIMIT_VALUE / 3.0) * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
+	const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_CL = SEGMENT_SEARCH_MEMORY_LIMIT_CL_VALUE * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
 	//const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT = 50 * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
 	//const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_CL = (unsigned int)std::ceil(50 / 3.0) * SEGMENT_MEMORY_LIMIT_TO_BYTES; // in bytes (divisible by sizeof(double))
 	//const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT = 4 * 8; // in bytes (divisible by sizeof(double))

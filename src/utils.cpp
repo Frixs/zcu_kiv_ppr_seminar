@@ -136,10 +136,10 @@ void utils::cl_track_error_code(cl_int error_code, int idx)
 
 	int curr_idx = idx - 1;
 	
-	if (_cl_error_code_buffer.size() < idx)
+	if ((int)_cl_error_code_buffer.size() < idx)
 	{
-		int req_add = idx - _cl_error_code_buffer.size();
-		for (size_t i = 0; i < req_add; ++i)
+		int req_add = idx - (int)_cl_error_code_buffer.size();
+		for (int i = 0; i < req_add; ++i)
 			_cl_error_code_buffer.push_back({});
 	}
 	
