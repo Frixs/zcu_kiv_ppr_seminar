@@ -79,6 +79,11 @@ void worker::percentil::find(std::ifstream* file, size_t* fsize, size_t total_va
 	char* buffer = nullptr;
 	size_t buffer_size = 0;
 
+	// Create program, only OpenCL specific
+	cl::Program program(nullptr);
+	if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL)
+		program = utils::cl_create_program(_find_percentil_job(), *worker::values::get_processing_type_value());
+
 	size_t percentil_pos = (size_t)std::floor(percentil * total_values / 100.0); // get percentil number position relative to the entire (valid) data sequence
 	size_t percentil_bucket_idx = percentil_pos - bucket_value_offset; //- 1;
 	//if (percentil_bucket_idx > 0) percentil_bucket_idx -= 1;
@@ -103,9 +108,8 @@ void worker::percentil::find(std::ifstream* file, size_t* fsize, size_t total_va
 		(*file).read(buffer, buffer_size);
 
 		// If OpenCL processing...
-		if (false && *worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL) // ignore OpenCL for this calculation
+		if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL) // ignore OpenCL for this calculation
 		{
-			auto program = utils::cl_create_program(_find_percentil_job(), *worker::values::get_processing_type_value());
 			auto context = program.getInfo<CL_PROGRAM_CONTEXT>();
 			auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
 			auto& device = devices.front();
