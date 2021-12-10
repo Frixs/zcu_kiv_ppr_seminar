@@ -73,6 +73,11 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 	char* buffer = nullptr;
 	size_t buffer_size = 0;
 
+	// Create program, only OpenCL specific
+	cl::Program program(nullptr);
+	if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL)
+		program = utils::cl_create_program(_find_result_job(), *worker::values::get_processing_type_value());
+
 	bool first_set = false;
 	size_t total_buckets_index = 0;
 
@@ -96,9 +101,8 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 		size_t last_occurance_index_local = 0;
 
 		// If OpenCL processing...
-		if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL)
+		if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL) // ignore OpenCL for this calculation
 		{
-			auto program = utils::cl_create_program(_find_result_job(), *worker::values::get_processing_type_value());
 			auto context = program.getInfo<CL_PROGRAM_CONTEXT>();
 			auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
 			auto& device = devices.front();
@@ -115,7 +119,6 @@ void worker::result::find(std::ifstream* file, size_t* fsize, double percentil_v
 			error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(buffer_size / sizeof(double))); utils::cl_track_error_code(error, 24);
 
 			error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, buffer_size, (double*)buffer); utils::cl_track_error_code(error, 25);
-			error = cl::finish(); utils::cl_track_error_code(error, 26);
 
 			// Parallel work (job)
 			auto work = [&](tbb::blocked_range<size_t> it)

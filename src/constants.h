@@ -15,7 +15,7 @@ namespace constants
 	/// <summary>
 	/// Max allowed memory (in MBs), CL specific
 	/// </summary>
-	const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_CL_VALUE = 30;
+	const unsigned int SEGMENT_SEARCH_MEMORY_LIMIT_CL_VALUE = 10;
 
 	/// <summary>
 	/// Limit algorithm program memory

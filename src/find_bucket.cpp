@@ -156,15 +156,14 @@ void _process_segment_data_count(size_t lows_local, size_t highs_local, size_t e
 /// Processes values (segment of the input data based on limited memory / chunk) to get number of lower, greater, and equal values to the inputing pivot based on limit upper and lower values.
 /// For each of the selecting classes, it also selects posible pivots.
 /// </summary>
-void _process_segment_data(double* values, size_t n,
+void _process_segment_data(double* values, size_t n, cl::Program* program,
 	double p, double h, double l,
 	size_t* total_values, size_t* lows, size_t* highs, size_t* equals, std::vector<double>* pivot_lower_samples, std::vector<double>* pivot_upper_samples, std::vector<double>* pivot_equal_samples)
 {
 	// If OpenCL processing...
 	if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL)
 	{
-		auto program = utils::cl_create_program(_process_segment_data_job(), *worker::values::get_processing_type_value());
-		auto context = program.getInfo<CL_PROGRAM_CONTEXT>();
+		auto context = (*program).getInfo<CL_PROGRAM_CONTEXT>();
 		auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
 		auto& device = devices.front();
 
@@ -186,7 +185,7 @@ void _process_segment_data(double* values, size_t n,
 		cl::Buffer cl_buf_highs_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(size_t), &highs_local, &error); utils::cl_track_error_code(error, 1);
 		cl::Buffer cl_buf_equals_local(context, CL_MEM_READ_WRITE | CL_MEM_HOST_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(size_t), &equals_local, &error); utils::cl_track_error_code(error, 1);
 
-		cl::Kernel kernel(program, "run", &error); utils::cl_track_error_code(error, 2);
+		cl::Kernel kernel(*program, "run", &error); utils::cl_track_error_code(error, 2);
 		error = kernel.setArg(0, cl_buf_buffer_vals); utils::cl_track_error_code(error, 3);
 		error = kernel.setArg(1, cl_buf_lower_pivot_sample); utils::cl_track_error_code(error, 3);
 		error = kernel.setArg(2, cl_buf_upper_pivot_sample); utils::cl_track_error_code(error, 3);
@@ -203,7 +202,7 @@ void _process_segment_data(double* values, size_t n,
 		cl::CommandQueue queue(context, device);
 		error = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(n)); utils::cl_track_error_code(error, 4);
 
-		error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, n * sizeof(double), values); utils::cl_track_error_code(error, 5);
+		//error = queue.enqueueReadBuffer(cl_buf_buffer_vals, CL_TRUE, 0, n * sizeof(double), values); utils::cl_track_error_code(error, 5);
 		error = queue.enqueueReadBuffer(cl_buf_lower_pivot_sample, CL_TRUE, 0, sizeof(double), &lower_pivot_sample); utils::cl_track_error_code(error, 5);
 		error = queue.enqueueReadBuffer(cl_buf_upper_pivot_sample, CL_TRUE, 0, sizeof(double), &upper_pivot_sample); utils::cl_track_error_code(error, 5);
 		error = queue.enqueueReadBuffer(cl_buf_equal_pivot_sample, CL_TRUE, 0, sizeof(double), &equal_pivot_sample); utils::cl_track_error_code(error, 5);
@@ -211,7 +210,6 @@ void _process_segment_data(double* values, size_t n,
 		error = queue.enqueueReadBuffer(cl_buf_lows_local, CL_TRUE, 0, sizeof(size_t), &lows_local); utils::cl_track_error_code(error, 5);
 		error = queue.enqueueReadBuffer(cl_buf_highs_local, CL_TRUE, 0, sizeof(size_t), &highs_local); utils::cl_track_error_code(error, 5);
 		error = queue.enqueueReadBuffer(cl_buf_equals_local, CL_TRUE, 0, sizeof(size_t), &equals_local); utils::cl_track_error_code(error, 5);
-		error = cl::finish(); utils::cl_track_error_code(error, 6);
 
 		// Combine values
 		if (!worker::values::get_state()->total_values_counted)
@@ -306,6 +304,11 @@ void worker::bucket::find(std::ifstream* file, size_t* fsize, int percentil,
 	char* buffer = nullptr;
 	size_t buffer_size = 0;
 
+	// Create program, only OpenCL specific
+	cl::Program program(nullptr);
+	if (*worker::values::get_processing_type() == worker::values::ProcessingType::OpenCL)
+		program = utils::cl_create_program(_process_segment_data_job(), *worker::values::get_processing_type_value());
+
 	float pctp_offset = 0; // offset % from the lowest (initial) limit to the current one; it maintain percentil position in all data sequence
 
 	double bucket_pivot_val = 0; // initial pivot value of currently calculated bucket
@@ -347,12 +350,12 @@ void worker::bucket::find(std::ifstream* file, size_t* fsize, int percentil,
 			(*file).read(buffer, buffer_size);
 
 			// Process segment data
-			_process_segment_data((double*)buffer, buffer_size / sizeof(double),
+			_process_segment_data((double*)buffer, buffer_size / sizeof(double), &program,
 				bucket_pivot_val, *bucket_upper_val, *bucket_lower_val,
 				total_values, &lows, &highs, &equals, &pivot_lower_samples, &pivot_upper_samples, &pivot_equal_samples);
 			if (worker::values::get_state()->terminate_process_requested) return;
 		}
-
+		
 		// Free the last buffer once done
 		utils::fi_try_free_buffer(&buffer);
 
